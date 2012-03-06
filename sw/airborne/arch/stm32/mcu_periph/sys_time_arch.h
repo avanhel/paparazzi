@@ -56,8 +56,10 @@ extern void sys_tick_irq_handler(void);
 
 /** Busy wait, in microseconds */
 /* for now empty shell */
-static inline void sys_time_usleep(uint32_t us) {
-
+static inline void sys_time_usleep(uint32_t us) 
+{
+  volatile uint64_t cnt;
+  for (uint64_t i=0;i< 5000000; i++) cnt++;
 }
 
 #endif /* SYS_TIME_ARCH_H */
