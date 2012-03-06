@@ -88,21 +88,6 @@ void imu_periodic(void)
 //struct Imu imu;
 
 
-#include "subsystems/imu.h"
-
-void imu_init(void)
-{
-  ins_init();
-}
-
-void imu_periodic(void)
-{
-  ins_periodic_task();
-}
-
-//struct Imu imu;
-
-
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 //	XSens Specific
