@@ -288,7 +288,7 @@ AP_MODE_NAV
     <!--<subsystem name="ahrs" type="int_cmpl_euler"/>
     <subsystem name="stabilization" type="euler"/>-->
     <subsystem name="ahrs"          type="int_cmpl_quat"/>
-    <subsystem name="stabilization" type="euler"/>
+    <subsystem name="stabilization" type="int_quat"/>
     <!--<subsystem name="ahrs"          type="ic"/>
     <subsystem name="ins"           type="hff"/>-->
     <define name="MAG_UPDATE_YAW_ONLY" value="1"/>
