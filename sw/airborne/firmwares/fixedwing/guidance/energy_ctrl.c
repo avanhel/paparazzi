@@ -132,6 +132,11 @@ float ac_char_cruise_throttle = 0.0f;
 float ac_char_cruise_pitch = 0.0f;
 int ac_char_cruise_count = 0;
 
+int ac_char_train = 1;
+
+float v_ctl_climb_precommand = 0.0f;
+
+
 static void ac_char_average(float* last, float new, int count)
 {
   *last = (((*last) * (((float)count) - 1.0f)) + new) / ((float) count);
@@ -139,26 +144,52 @@ static void ac_char_average(float* last, float new, int count)
 
 static void ac_char_update(float throttle, float pitch, float climb, float accelerate)
 {
+  // Do not update
+  if (ac_char_train <= 0)
+    return;
+
+  // Average
   if ((accelerate > -0.02) && (accelerate < 0.02))
   {
     if (throttle >= 1.0f)
     {
       ac_char_climb_count++;
-      ac_char_average(&ac_char_climb_pitch, pitch * 57.6f,            ac_char_climb_count );
+      ac_char_average(&ac_char_climb_pitch, pitch,            ac_char_climb_count );
       ac_char_average(&ac_char_climb_max ,  estimator_z_dot,  ac_char_climb_count );
     }
     else if (throttle <= 0.0f)
     {
       ac_char_descend_count++;
-      ac_char_average(&ac_char_descend_pitch, pitch * 57.6f ,           ac_char_descend_count );
+      ac_char_average(&ac_char_descend_pitch, pitch ,           ac_char_descend_count );
       ac_char_average(&ac_char_descend_max ,  estimator_z_dot , ac_char_descend_count );
     }
     else if ((climb > -0.125) && (climb < 0.125))
     {
       ac_char_cruise_count++;
       ac_char_average(&ac_char_cruise_throttle , throttle , ac_char_cruise_count );
-      ac_char_average(&ac_char_cruise_pitch    , pitch * 57.6f  ,   ac_char_cruise_count );
+      ac_char_average(&ac_char_cruise_pitch    , pitch ,   ac_char_cruise_count );
     }
+  }
+}
+
+static void ac_char_precommand(float *pre_throttle, float *pre_pitch, float climb)
+{
+  float percentmax = 0;
+  if (climb >= 0.0f) // Up
+  {
+    percentmax = climb / ac_char_climb_max;
+    Bound(percentmax, 0.0f, 1.0f);
+    percentmax *= v_ctl_climb_precommand;
+    *pre_throttle = percentmax * (1.0f - ac_char_cruise_throttle);
+    *pre_pitch = percentmax * (ac_char_climb_pitch - ac_char_cruise_pitch);
+  }
+  else // Down
+  {
+    percentmax = climb / ac_char_descend_max; // climb neg and descend negative -> percent prositive
+    Bound(percentmax, 0.0f, 1.0f);
+    percentmax *= v_ctl_climb_precommand;
+    *pre_throttle = (-percentmax) * ac_char_cruise_throttle;
+    *pre_pitch = percentmax * (ac_char_descend_pitch - ac_char_cruise_pitch);
   }
 }
 
@@ -265,11 +296,17 @@ void v_ctl_climb_loop( void )
     else if (v_ctl_auto_throttle_nominal_cruise_throttle > 1.0f) v_ctl_auto_throttle_nominal_cruise_throttle = 1.0f;
   }
 
+
+  float pre_throttle, pre_pitch;
+  ac_char_precommand(&pre_throttle, &pre_pitch, v_ctl_climb_setpoint);
+
+
   // Total Controller
   float controlled_throttle = v_ctl_auto_throttle_nominal_cruise_throttle
     + v_ctl_auto_throttle_climb_throttle_increment * v_ctl_climb_setpoint
     + v_ctl_auto_throttle_of_airspeed_pgain * speed_error
-    + v_ctl_energy_total_pgain * en_tot_err;
+    + v_ctl_energy_total_pgain * en_tot_err
+    + pre_throttle;
 
 
   if ((controlled_throttle >= 1.0f) || (controlled_throttle <= 0.0f))
@@ -290,7 +327,8 @@ void v_ctl_climb_loop( void )
 		- v_ctl_auto_pitch_of_airspeed_pgain * speed_error
                 + v_ctl_auto_pitch_of_airspeed_dgain * vdot
                 + v_ctl_energy_diff_pgain * en_dis_err
-                + v_ctl_auto_throttle_nominal_cruise_pitch;
+                + v_ctl_auto_throttle_nominal_cruise_pitch
+                + pre_pitch;
 
   nav_pitch = v_ctl_pitch_of_vz;
 

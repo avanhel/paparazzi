@@ -72,4 +72,8 @@ extern float ac_char_descend_max;
 extern float ac_char_cruise_throttle;
 extern float ac_char_cruise_pitch;
 
+extern int ac_char_train;
+
+extern float v_ctl_climb_precommand;
+
 #endif /* FW_V_CTL_H */
