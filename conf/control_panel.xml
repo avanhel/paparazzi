@@ -62,7 +62,7 @@
   <section name="sessions">
     <session name="TUdelftTwinjet Simulator">
       <program name="GCS">
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+        <arg flag="-layout" constant="./TUDelft/gcsMavlab.xml"/>
       </program>
       <program name="Server">
         <arg flag="-n"/>
@@ -96,7 +96,7 @@
       <program name="Server"/>
       <program name="GCS">
         <arg flag="-speech"/>
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+        <arg flag="-layout" constant="./TUDelft/gcsMavlab.xml"/>
       </program>
       <program name="Messages">
         <arg flag="-c" constant="telemetry"/>
@@ -111,7 +111,7 @@
       </program>
       <program name="GCS">
         <arg flag="-speech"/>
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+        <arg flag="-layout" constant="./TUDelft/gcsMavlab.xml"/>
       </program>
       <program name="Server"/>
       <program name="Messages"/>
@@ -129,7 +129,7 @@
       <program name="Server"/>
       <program name="GCS">
         <arg flag="-speech" constant=""/>
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+        <arg flag="-layout" constant="./TUDelft/gcsMavlab.xml"/>
       </program>
       <program name="Messages"/>
     </session>
@@ -186,7 +186,7 @@
       <program name="Server"/>
       <program name="GCS">
         <arg flag="-speech" constant=""/>
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+        <arg flag="-layout" constant="./TUDelft/gcsMavlab.xml"/>
       </program>
       <program name="Messages">
         <arg flag="-c" constant="telemetry"/>
@@ -200,7 +200,7 @@
       </program>
       <program name="Server"/>
       <program name="GCS">
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+        <arg flag="-layout" constant="./TUDelft/gcsMavlab.xml"/>
       </program>
       <program name="Messages">
         <arg flag="-c" constant="telemetry"/>
@@ -221,7 +221,7 @@
       </program>
       <program name="GCS">
         <arg flag="-speech"/>
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+        <arg flag="-layout" constant="./TUDelft/gcsMavlab.xml"/>
       </program>
       <program name="Server"/>
       <program name="Messages"/>
