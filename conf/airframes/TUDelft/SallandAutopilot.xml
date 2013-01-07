@@ -234,9 +234,13 @@
 
   <firmware name="fixedwing">
 
+      <configure name="FLASH_MODE" value="JTAG"/>
+      <configure name="BMP_PORT" value="/dev/ttyACM0"/>
+
+
     <define name="USE_AIRSPEED"/>
 
-    <target name="ap" board="TUDelft/fireswarm_1.0">
+    <target name="ap" board="TUDelft/fireswarm_2.0">
        <define name="AIRSPEED_ETS_I2C_DEV" value="i2c1"/>
        <define name="USE_I2C1"/>
 
