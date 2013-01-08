@@ -59,7 +59,7 @@
 
 
 
-#define DefaultVoltageOfAdc(adc) (0.00485*adc)
+#define DefaultVoltageOfAdc(adc) (0.003921*adc)
 
 /* Onboard ADCs */
 /*
@@ -70,10 +70,9 @@
    ADC_6 PC2/ADC12
    BATT  PC4/ADC14
 */
-#define BOARD_ADC_CHANNEL_1 ADC_Channel_13
+#define BOARD_ADC_CHANNEL_1 ADC_Channel_15
 #define BOARD_ADC_CHANNEL_2 ADC_Channel_10
 #define BOARD_ADC_CHANNEL_3 ADC_Channel_11
-// we can only use ADC1,2,3; the last channel is for bat monitoring
 #define BOARD_ADC_CHANNEL_4 ADC_Channel_14
 
 /* provide defines that can be used to access the ADC_x in the code or airframe file
@@ -83,6 +82,7 @@
 #define ADC_1 0
 #define ADC_2 1
 #define ADC_3 2
+#define ADC_4 3
 
 /* allow to define ADC_CHANNEL_VSUPPLY in the airframe file*/
 #ifndef ADC_CHANNEL_VSUPPLY
@@ -93,7 +93,7 @@
 // FIXME, this is not very nice, is also stm lib specific
 #ifdef USE_AD1
 #define ADC1_GPIO_INIT(gpio) {                  \
-    (gpio).GPIO_Pin  = GPIO_Pin_3 | GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_4; \
+    (gpio).GPIO_Pin  = GPIO_Pin_3 | GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_4 | GPIO_Pin_5; \
     (gpio).GPIO_Mode = GPIO_Mode_AIN;           \
     GPIO_Init(GPIOC, (&gpio));                  \
   }

@@ -39,7 +39,7 @@ ACTUATORS = actuators_direct
 # default LED configuration
 #
 ifndef RADIO_CONTROL_LED
-RADIO_CONTROL_LED  = 2
+RADIO_CONTROL_LED  = none
 endif
 
 ifndef BARO_LED
