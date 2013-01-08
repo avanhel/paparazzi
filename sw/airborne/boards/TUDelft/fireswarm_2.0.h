@@ -6,7 +6,7 @@
 #define AHB_CLK 72000000
 
 /* Onboard LEDs */
-/* red */
+/* red 
 #ifndef USE_LED_1
 #define USE_LED_1 1
 #endif
@@ -14,6 +14,7 @@
 #define LED_1_GPIO_CLK RCC_APB2Periph_GPIOA
 #define LED_1_GPIO_PIN GPIO_Pin_5
 #define LED_1_AFIO_REMAP ((void)0)
+*/
 
 /* blue */
 #ifndef USE_LED_2
@@ -85,7 +86,7 @@
 
 /* allow to define ADC_CHANNEL_VSUPPLY in the airframe file*/
 #ifndef ADC_CHANNEL_VSUPPLY
-#define ADC_CHANNEL_VSUPPLY 3
+#define ADC_CHANNEL_VSUPPLY ADC_2
 #endif
 
 /* GPIO mapping for ADC1 pins, overwrites the default in arch/stm32/mcu_periph/adc_arch.c */

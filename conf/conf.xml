@@ -20,16 +20,6 @@
    gui_color="blue"
   />
   <aircraft
-   name="C172"
-   ac_id="25"
-   airframe="airframes/TUDelft/c172.xml"
-   radio="radios/cockpitSX.xml"
-   telemetry="telemetry/default_fixedwing_imu_9k6.xml"
-   flight_plan="flight_plans/TUDelft/versatile_flaps_ehwo.xml"
-   settings=" settings/fixedwing_basic.xml"
-   gui_color="red"
-  />
-  <aircraft
    name="Discovery"
    ac_id="99"
    airframe="airframes/TUDelft/openuas_discovery.xml"
