@@ -215,7 +215,6 @@
 
     <load name="adc_generic.xml">
       <configure name="ADC_CHANNEL_GENERIC1" value="ADC_1" />
-      <configure name="ADC_CHANNEL_GENERIC2" value="ADC_3" />
     </load>
 
 <!--
@@ -283,7 +282,7 @@
 
     <!-- Communication -->
     <subsystem name="radio_control" type="ppm"/>
-    <subsystem name="telemetry" type="xbee_api">
+    <subsystem name="telemetry" type="transparent">
       <configure name="MODEM_BAUD" value="B9600"/>
       <configure name="MODEM_PORT" value="UART3"/>
     </subsystem>
