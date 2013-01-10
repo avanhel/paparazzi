@@ -1,0 +1,18 @@
+<!DOCTYPE settings SYSTEM "../settings.dtd">
+
+<!-- A conf to use for standard operation (no tuning) -->
+
+<settings>
+  <dl_settings>
+    
+    <dl_settings NAME="Package Delivery">
+       <dl_setting MAX="100" MIN="0" STEP="1" VAR="PackageDefAltitude" param="PACKAGEDEFALTITUDE" shortname=" Drop Altitude"/>
+      <dl_setting MAX="10" MIN="0" STEP="0.01" VAR="PackageDefServoDelay" param = "PACKAGEDEFSERVODELAY"  shortname="Servo Delay"/>    
+      <dl_setting MAX="0.2" MIN="0.001" STEP="0.001" VAR="PackAlpha" param = "PACKAGEDEFALPHA"  shortname="Alpha"/>
+      <dl_Setting MAX="200" MIN="20" STEP="1" VAR="PackageStartDist" param = "PACKAGESTARTDIST" shortname="Start Distance"/>
+<!-- This value below is temporary and will be removed in furture versions       -->
+      <dl_Setting MAX="200" MIN="-200" STEP="1" VAR="PackageReleaseDistance" param = "PACKAGERELEASEDISTANCE" shortname="Rel Distance"/>
+    </dl_settings>
+    
+  </dl_settings>
+</settings>

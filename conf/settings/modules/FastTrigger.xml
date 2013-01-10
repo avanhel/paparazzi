@@ -1,0 +1,13 @@
+<!DOCTYPE settings SYSTEM "../settings.dtd">
+
+<!-- A conf to use for standard operation (no tuning) -->
+
+
+<settings>
+  <dl_settings>   
+    <dl_settings NAME="Fast Trigger">
+      <dl_setting MAX="100" MIN="0" STEP="0.1" VAR="FastTriggerMinDist" param="FASTTRIGGERMINDIST" shortname="Distance"/>     
+      <dl_setting MAX="1" MIN="0" STEP="0.01" VAR="FastTriggerMinAngle" param="FASTTRIGGERMINANGLE" shortname="Angle"/>  
+    </dl_settings>  
+  </dl_settings>
+</settings>

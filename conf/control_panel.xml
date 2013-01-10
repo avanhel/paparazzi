@@ -13,7 +13,7 @@
       <arg flag="-b" variable="ivy_bus"/>
     </program>
     <program name="SmartUAV" command="../SmartUAV/bin/SmartUAV">
-      <arg flag="-r" />
+      <arg flag="-r"/>
     </program>
     <program name="Data Link" command="sw/ground_segment/tmtc/link">
       <arg flag="-b" variable="ivy_bus"/>
@@ -42,8 +42,7 @@
     <program name="Sony" command="sw/ground_segment/tmtc/TUDelft/sony">
       <arg flag="-b" variable="ivy_bus"/>
     </program>
-    <program name="Photolist" command="sw/tools/photolist/build/photolist | tee photolist.log -a">
-    </program>
+    <program name="Photolist" command="sw/tools/photolist/build/photolist | tee photolist.log -a"/>
     <program name="Vision" command="sw/ground_segment/tmtc/TUDelft/visionresult">
       <arg flag="-b" variable="ivy_bus"/>
     </program>
@@ -63,6 +62,12 @@
       <arg flag="-b" variable="ivy_bus"/>
     </program>
     <program name="Http Server" command="sw/ground_segment/tmtc/boa"/>
+    <program name="Weather Station" command="sw/ground_segment/misc/CV3F2ivy">
+      <arg flag="-b" variable="ivy_bus"/>
+      <arg flag="-d" constant="/dev/ttyUSB0"/>
+      <arg flag="-s" constant="2"/>
+      <arg flag="-i" constant="45"/>
+    </program>
   </section>
   <section name="sessions">
     <session name="TUdelftTwinjet Simulator">
@@ -83,13 +88,27 @@
         <arg flag="8" constant="/dev/ttyUSB1"/>
       </program>
     </session>
+    <session name="[OBC] USB0: xTend Transparent @38400 with FLOW CONTROL">
+      <program name="Data Link">
+        <arg flag="-d" constant="/dev/ttyUSB0"/>
+        <arg flag="-uplink" constant=""/>
+        <arg flag="-s" constant="38400"/>
+        <arg flag="-hfc" constant=""/>
+      </program>
+      <program name="Server"/>
+      <program name="GCS">
+        <arg flag="-speech" constant=""/>
+        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+      </program>
+      <program name="Messages"/>
+    </session>
     <session name="SmartUAV">
       <program name="Ivy2Udp">
         <arg flag="-h" constant="127.0.0.1"/>
         <arg flag="-id" constant="8"/>
       </program>
       <program name="SmartUAV">
-        <arg flag="1&>2" />
+        <arg flag="1&>2"/>
       </program>
     </session>
     <session name="Video">
@@ -130,6 +149,19 @@
       <program name="Server"/>
       <program name="Messages"/>
     </session>
+    <session name="Arnaud">
+      <program name="GCS"/>
+      <program name="Server">
+        <arg flag="-n"/>
+      </program>
+      <program name="Simulator">
+        <arg flag="-a" constant="MentorDeliver"/>
+        <arg flag="-boot"/>
+        <arg flag="-norc"/>
+      </program>
+      <program name="Environment Simulator"/>
+      <program name="Messages"/>
+    </session>
     <session name="Vision Results">
       <program name="Vision"/>
     </session>
@@ -139,20 +171,6 @@
         <arg flag="-transport" constant="xbee"/>
         <arg flag="-uplink" constant=""/>
         <arg flag="-s" constant="57600"/>
-      </program>
-      <program name="Server"/>
-      <program name="GCS">
-        <arg flag="-speech" constant=""/>
-        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
-      </program>
-      <program name="Messages"/>
-    </session>
-    <session name="[OBC] USB0: xTend Transparent @38400 with FLOW CONTROL">
-      <program name="Data Link">
-        <arg flag="-d" constant="/dev/ttyUSB0"/>
-        <arg flag="-uplink" constant=""/>
-        <arg flag="-s" constant="38400"/>
-        <arg flag="-hfc" constant=""/>
       </program>
       <program name="Server"/>
       <program name="GCS">
@@ -187,6 +205,19 @@
         <arg flag="-c" constant="'*:telemetry:DESIRED:altitude'"/>
       </program>
     </session>
+    <session name="SimulationMentorDeliver">
+      <program name="GCS"/>
+      <program name="Server">
+        <arg flag="-n"/>
+      </program>
+      <program name="Simulator">
+        <arg flag="-a" constant="MentorDeliver"/>
+        <arg flag="-boot"/>
+        <arg flag="-norc"/>
+      </program>
+      <program name="Messages"/>
+      <program name="Environment Simulator"/>
+    </session>
     <session name="cessna">
       <program name="GCS">
         <arg flag="-layout" constant="./TUDelft/cessna.xml"/>
@@ -203,6 +234,23 @@
       <program name="IvySerialBridge">
         <arg flag="25" constant="/dev/ttyUSB1"/>
         <arg flag="4"/>
+      </program>
+    </session>
+    <session name="StoreFlightTest">
+      <program name="Data Link">
+        <arg flag="-d" constant="/dev/ttyUSB0"/>
+        <arg flag="-transport" constant="xbee"/>
+        <arg flag="-uplink"/>
+        <arg flag="-s" constant="57600"/>
+      </program>
+      <program name="GCS">
+        <arg flag="-speech"/>
+        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+      </program>
+      <program name="Server"/>
+      <program name="Messages"/>
+      <program name="Weather Station">
+        <arg flag="-d" constant="/dev/ttyS0"/>
       </program>
     </session>
     <session name="USB: Transparant @ 57600">
@@ -232,6 +280,23 @@
       </program>
       <program name="Messages">
         <arg flag="-c" constant="telemetry"/>
+      </program>
+    </session>
+    <session name="XbeeUSB0Weather">
+      <program name="Data Link">
+        <arg flag="-d" constant="/dev/ttyUSB0"/>
+        <arg flag="-transport" constant="xbee"/>
+        <arg flag="-uplink"/>
+        <arg flag="-s" constant="57600"/>
+      </program>
+      <program name="GCS">
+        <arg flag="-speech"/>
+        <arg flag="-layout" constant="./TUDelft/gcsHeering.xml"/>
+      </program>
+      <program name="Server"/>
+      <program name="Messages"/>
+      <program name="Weather Station">
+        <arg flag="-d" constant="/dev/ttyS0"/>
       </program>
     </session>
     <session name="Forward C172 to SkyWalker over ttyUSB1">

@@ -8,16 +8,19 @@ else
 endif
 
 
-all: davis2ivy kestrel2ivy
+all: davis2ivy kestrel2ivy CV3F2ivy
 
 clean:
-	rm -f *.o davis2ivy kestrel2ivy
+	rm -f *.o davis2ivy kestrel2ivy CV3F2ivy
 
 davis2ivy: davis2ivy.o
 	g++ -o davis2ivy davis2ivy.o  $(LIBRARYS)  -livy
 
 kestrel2ivy: kestrel2ivy.o
 	g++ -o kestrel2ivy kestrel2ivy.o $(LIBRARYS) -livy
+	
+CV3F2ivy: CV3F2ivy.o
+	g++ -o CV3F2ivy CV3F2ivy.o $(LIBRARYS) -livy
 
 %.o : %.c
 	gcc -c -O2 -Wall $(INCLUDES) $<

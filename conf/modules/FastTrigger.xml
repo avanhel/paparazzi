@@ -1,0 +1,18 @@
+<!DOCTYPE module SYSTEM "module.dtd">
+<module name="FastTrigger">
+	<!--
+	The module name is also the name for the folder 
+	This line below is line that should be added to the airframe file to activate te program.
+	<load name="FastTrigger.xml"/> 
+	
+	-->
+  <header>
+	<file name="FastTrigger.h" />
+  </header>
+<init fun="FastTriggerInit()"/> 
+<periodic fun="FastTriggerPeriodic()" freq = "60" autorun="TRUE"/>
+  <makefile>
+    <define name="FASTTRIGGER"/>
+    <file name="FastTrigger.c"/>
+  </makefile>
+</module>
