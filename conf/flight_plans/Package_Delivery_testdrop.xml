@@ -1,6 +1,6 @@
 <!DOCTYPE flight_plan SYSTEM "flight_plan.dtd">
 
-<flight_plan alt="40" ground_alt="-4" lat0="51.979479" lon0="4.390229" max_dist_from_home="550" name="PackageDelivery" security_height="30">
+<flight_plan alt="100" ground_alt="-4" lat0="51.979479" lon0="4.390229" max_dist_from_home="550" name="PackageDelivery" security_height="30">
   <header>
 #include "subsystems/datalink/datalink.h"
 #include "modules/Package_Delivery/Package_Delivery.h"

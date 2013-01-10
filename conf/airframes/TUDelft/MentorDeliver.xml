@@ -223,7 +223,7 @@
       <!-- The surface roughness length -->
       <define name="PackageDefRoughnessLength" value="0.14" />
       <!-- The altitude from which the package is released [m]-->
-      <define name="PACKAGEDEFALTITUDE" value="40.0" />
+      <define name="PACKAGEDEFALTITUDE" value="100.0" />
       <!-- The time between the activation of the servo and the release of the package [sec]-->
       <define name = "PACKAGEDEFSERVODELAY" value = "0.2" />
       <define name = "PACKAGESTARTDIST" value="60.0"/>

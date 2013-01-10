@@ -153,6 +153,7 @@
 # /sw/ground_segment/misc
 /sw/ground_segment/misc/davis2ivy
 /sw/ground_segment/misc/kestrel2ivy
+/sw/ground_segment/misc/CV3F2ivy
 
 
 # /sw/airborne/arch/lpc21/test/bootloader
