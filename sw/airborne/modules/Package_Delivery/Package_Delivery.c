@@ -194,7 +194,7 @@ void PackageCalculateDistance(void){
  PDPRTDEBSTR("Calculate Distance")
 //  initial condition
   PackStepSize = 0.1;
-  PackAlpha = PACKAGEDEFALPHA;
+//   PackAlpha = PACKAGEDEFALPHA;
   Z  = PackageDefAltitudeReference - ground_alt;
   Vz = PackageVerticalSpeed;
   Vg = PackageGlobAirspeed;
@@ -214,7 +214,7 @@ void PackageCalculateDistance(void){
   
   //  initialise the counter
   k = 1;
-  while (Z >0.0 && k <500){
+  while (Z >0.0 && k <100){
     // add feature, if terminal velocity is reached, the function becomes simpler due to constant speed, this should reduce the calculation steps. 
 //update the airspeed
 //  PDPRTDEBSTR("Runge Kutta") 

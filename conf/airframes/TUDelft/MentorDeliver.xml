@@ -292,8 +292,8 @@
     </target>
     <target name="sim" board="pc">
       <!-- Added lines for Debugging purposes -->
-<!--          <define name="DEBUG_FT"/> -->
-<!--          <define name="DEBUG_PD"/> -->
+         <define name="DEBUG_FT"/>
+         <define name="DEBUG_PD"/>
     </target>
 
     <define name="AGR_CLIMB"/>
