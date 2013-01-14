@@ -276,7 +276,14 @@ void PackageCalculateDistance(void){
 //   PDPRTDEB(i,k)
 } 
 PDPRTDEBSTR("End Calc")
-     PDPRTDEB(f,Z)
+if (Z >0){
+      /* Integration not finished -> approximation of the time with the current
+       speed  */
+      float t = Z / Vz;
+      X += Vg *t;
+      PDPRTDEBSTR("Approximation used")
+}
+  PDPRTDEB(f,Z)
   PDPRTDEB(f,Vz)
   PDPRTDEB(f,Vg)
   PDPRTDEB(f,X)
