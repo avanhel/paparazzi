@@ -127,7 +127,7 @@ FTPRTDEB(f,FastTrigger_angle_to_wp)
 	FastTriggerSwitch=FALSE;
 	FastTriggerInit();
     }
-    else if (FastTrigger_angle_to_wp <3*M_PI/2* (1+FastTriggerMinAngle) && FastTrigger_angle_to_wp> 3*M_PI/2*(1-FastTriggerMinAngle) && FastTrigger_dist_to_wp < FastTriggerMinDist){
+    else if ((FastTrigger_angle_to_wp <3*M_PI/2+(M_PI/2*FastTriggerMinAngle)) && (FastTrigger_angle_to_wp> 3*M_PI/2-(M_PI/2*FastTriggerMinAngle)) && FastTrigger_dist_to_wp < FastTriggerMinDist){
               BombShoot() ;
  FTPRTDEBSTR("test off 270")
 	FastTriggerSwitch=FALSE;
