@@ -269,7 +269,9 @@ static void baro_update_logic(void)
   static uint16_t lasttempval = 0;
   static uint8_t temp_or_press_was_updated_last = 0; // 0 = press, so we now wait for temp, 1 = temp so we now wait for press
 
-  static int sync_errors;
+  static int sync_errors = 0;
+  static int spikes = 0;
+  static int spike_detected = 0;
 
   if (temp_or_press_was_updated_last == 0)  // Last update was press so we are now waiting for temp
   {
@@ -309,8 +311,26 @@ static void baro_update_logic(void)
       }
     }
 
-    navdata_baro_available = TRUE;
+
+    if (spike_detected == 0)
+    {
+      navdata_baro_available = TRUE;
+    }
   }
+
+  // if press and temp are same and temp has jump: neglect the next frame
+  if ((navdata.temperature_pressure == navdata.pressure) && (abs(navdata.temperature_pressure - lasttempval) > 100))
+  {
+    // dont use next 3 packets
+    spike_detected = 3;
+    // dont use
+    navdata_baro_available = FALSE;
+
+    spikes++;
+    printf("Spike! # %d\n",spikes);
+  }
+  if (spike_detected)
+    spike_detected--;
 
   lastpressval = navdata.pressure;
   lasttempval = navdata.temperature_pressure;
@@ -369,6 +389,8 @@ void navdata_update()
         tmp = p[0];
         p[0] = p[1];
         p[1] = tmp;
+
+        // printf("%d %d %d\n",navdata.nu_trame, navdata.pressure, navdata.temperature_pressure);
 
         baro_update_logic();
 
