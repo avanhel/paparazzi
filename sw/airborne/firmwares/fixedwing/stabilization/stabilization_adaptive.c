@@ -17,12 +17,12 @@
  * along with paparazzi; see the file COPYING.  If not, write to
  * the Free Software Foundation, 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
- *
  */
 
 /**
+ * @file firmwares/fixedwing/stabilization/stabilization_adaptive.c
  *
- * fixed wing horizontal adaptive control
+ * Fixed wing horizontal adaptive control.
  *
  */
 
@@ -30,12 +30,11 @@
 #include "led.h"
 #include "firmwares/fixedwing/stabilization/stabilization_attitude.h"
 #include "firmwares/fixedwing/stabilization/stabilization_adaptive.h"
-#include "estimator.h"
+#include "state.h"
 #include "subsystems/nav.h"
 #include "generated/airframe.h"
 #include CTRL_TYPE_H
 #include "firmwares/fixedwing/autopilot.h"
-
 
 /* outer loop parameters */
 float h_ctl_course_setpoint; /* rad, CW/north */
@@ -144,6 +143,24 @@ inline static void h_ctl_pitch_loop( void );
 #define H_CTL_PITCH_KFFD 0.
 #endif
 
+#if DOWNLINK
+#include "subsystems/datalink/telemetry.h"
+
+static void send_calibration(void) {
+  DOWNLINK_SEND_CALIBRATION(DefaultChannel, DefaultDevice,  &v_ctl_auto_throttle_sum_err, &v_ctl_auto_throttle_submode);
+}
+
+static void send_tune_roll(void) {
+  DOWNLINK_SEND_TUNE_ROLL(DefaultChannel, DefaultDevice,
+      &(stateGetBodyRates_f()->p), &(stateGetNedToBodyEulers_f()->phi), &h_ctl_roll_setpoint);
+}
+
+static void send_ctl_a(void) {
+  DOWNLINK_SEND_H_CTL_A(DefaultChannel, DefaultDevice,
+      &h_ctl_roll_sum_err, &h_ctl_ref_roll_angle, &h_ctl_pitch_sum_err, &h_ctl_ref_pitch_angle)
+}
+#endif
+
 void h_ctl_init( void ) {
   h_ctl_course_setpoint = 0.;
   h_ctl_course_pre_bank = 0.;
@@ -191,6 +208,11 @@ void h_ctl_init( void ) {
   v_ctl_pitch_dash_trim = 0.;
 #endif
 
+#if DOWNLINK
+  register_periodic_telemetry(DefaultPeriodic, "CALIBRATION", send_calibration);
+  register_periodic_telemetry(DefaultPeriodic, "TUNE_ROLL", send_tune_roll);
+  register_periodic_telemetry(DefaultPeriodic, "H_CTL_A", send_ctl_a);
+#endif
 }
 
 /**
@@ -201,14 +223,14 @@ void h_ctl_course_loop ( void ) {
   static float last_err;
 
   // Ground path error
-  float err = h_ctl_course_setpoint - estimator_hspeed_dir;
+  float err = h_ctl_course_setpoint - (*stateGetHorizontalSpeedDir_f());
   NormRadAngle(err);
 
   float d_err = err - last_err;
   last_err = err;
   NormRadAngle(d_err);
 
-  float speed_depend_nav = estimator_hspeed_mod/NOMINAL_AIRSPEED;
+  float speed_depend_nav = (*stateGetHorizontalSpeedNorm_f())/NOMINAL_AIRSPEED;
   Bound(speed_depend_nav, 0.66, 1.5);
 
   h_ctl_roll_setpoint = h_ctl_course_pre_bank_correction * h_ctl_course_pre_bank
@@ -223,7 +245,7 @@ static inline void compute_airspeed_ratio( void ) {
   if (use_airspeed_ratio) {
     // low pass airspeed
     static float airspeed = 0.;
-    airspeed = ( 15*airspeed + estimator_airspeed ) / 16;
+    airspeed = ( 15*airspeed + (*stateGetAirspeed_f()) ) / 16;
     // compute ratio
     float airspeed_ratio = airspeed / NOMINAL_AIRSPEED;
     Bound(airspeed_ratio, AIRSPEED_RATIO_MIN, AIRSPEED_RATIO_MAX);
@@ -285,13 +307,14 @@ inline static void h_ctl_roll_loop( void ) {
 #endif
 
   // Compute errors
-  float err = h_ctl_ref_roll_angle - estimator_phi;
+  float err = h_ctl_ref_roll_angle - stateGetNedToBodyEulers_f()->phi;
+  struct FloatRates* body_rate = stateGetBodyRates_f();
 #ifdef SITL
   static float last_err = 0;
-  estimator_p = (err - last_err)/(1/60.);
+  body_rate->p = (err - last_err)/(1/60.); // FIXME should be done in ahrs sim
   last_err = err;
 #endif
-  float d_err = h_ctl_ref_roll_rate - estimator_p;
+  float d_err = h_ctl_ref_roll_rate - body_rate->p;
 
   if (pprz_mode == PPRZ_MODE_MANUAL || launch == 0) {
     h_ctl_roll_sum_err = 0.;
@@ -325,7 +348,7 @@ inline static void loiter(void) {
   float pitch_trim;
 
 #if USE_AIRSPEED
-  if (estimator_airspeed > NOMINAL_AIRSPEED) {
+  if (stateGetAirspeed_f() > NOMINAL_AIRSPEED) {
     pitch_trim = v_ctl_pitch_dash_trim * (airspeed_ratio2-1) / ((AIRSPEED_RATIO_MAX * AIRSPEED_RATIO_MAX) - 1);
   } else {
     pitch_trim = v_ctl_pitch_loiter_trim * (airspeed_ratio2-1) / ((AIRSPEED_RATIO_MIN * AIRSPEED_RATIO_MIN) - 1);
@@ -355,7 +378,7 @@ inline static void h_ctl_pitch_loop( void ) {
   if (h_ctl_pitch_of_roll <0.)
     h_ctl_pitch_of_roll = 0.;
 
-  h_ctl_pitch_loop_setpoint = h_ctl_pitch_setpoint + h_ctl_pitch_of_roll * fabs(estimator_phi);
+  h_ctl_pitch_loop_setpoint = h_ctl_pitch_setpoint + h_ctl_pitch_of_roll * fabs(stateGetNedToBodyEulers_f()->phi);
 #if USE_PITCH_TRIM
   loiter();
 #endif
@@ -382,9 +405,9 @@ inline static void h_ctl_pitch_loop( void ) {
 #endif
 
   // Compute errors
-  float err =  h_ctl_ref_pitch_angle - estimator_theta;
+  float err =  h_ctl_ref_pitch_angle - stateGetNedToBodyEulers_f()->theta;
 #if USE_GYRO_PITCH_RATE
-  float d_err = h_ctl_ref_pitch_rate - estimator_q;
+  float d_err = h_ctl_ref_pitch_rate - stateGetBodyRates_f()->q;
 #else // soft derivation
   float d_err = (err - last_err)/H_CTL_REF_DT - h_ctl_ref_pitch_rate;
   last_err = err;

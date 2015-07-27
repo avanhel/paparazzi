@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2008-2009 Antoine Drouin <poinix@gmail.com>
  *
  * This file is part of paparazzi.
@@ -21,6 +19,12 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file firmwares/rotorcraft/datalink.c
+ * Handling of messages coming from ground and other A/Cs.
+ *
+ */
+
 #define DATALINK_C
 #define MODULES_DATALINK_C
 
@@ -38,10 +42,14 @@
 #include "booz_fms.h"
 #endif
 
+#if defined RADIO_CONTROL && defined RADIO_CONTROL_TYPE_DATALINK
+#include "subsystems/radio_control.h"
+#endif
+
 #include "firmwares/rotorcraft/navigation.h"
 
 #include "math/pprz_geodetic_int.h"
-#include "subsystems/ins.h"
+#include "state.h"
 
 #define IdOfMsg(x) (x[1])
 
@@ -89,22 +97,43 @@ void dl_parse_msg(void) {
     {
       uint8_t ac_id = DL_MOVE_WP_ac_id(dl_buffer);
       if (ac_id != AC_ID) break;
-      uint8_t wp_id = DL_MOVE_WP_wp_id(dl_buffer);
-      struct LlaCoor_i lla;
-      struct EnuCoor_i enu;
-      lla.lat = INT32_RAD_OF_DEG(DL_MOVE_WP_lat(dl_buffer));
-      lla.lon = INT32_RAD_OF_DEG(DL_MOVE_WP_lon(dl_buffer));
-      /* WP_alt is in cm, lla.alt in mm */
-      lla.alt = DL_MOVE_WP_alt(dl_buffer)*10 - ins_ltp_def.hmsl + ins_ltp_def.lla.alt;
-      enu_of_lla_point_i(&enu,&ins_ltp_def,&lla);
-      enu.x = POS_BFP_OF_REAL(enu.x)/100;
-      enu.y = POS_BFP_OF_REAL(enu.y)/100;
-      enu.z = POS_BFP_OF_REAL(enu.z)/100;
-      VECT3_ASSIGN(waypoints[wp_id], enu.x, enu.y, enu.z);
-      DOWNLINK_SEND_WP_MOVED_ENU(DefaultChannel, DefaultDevice, &wp_id, &enu.x, &enu.y, &enu.z);
+      if (stateIsLocalCoordinateValid()) {
+        uint8_t wp_id = DL_MOVE_WP_wp_id(dl_buffer);
+        struct LlaCoor_i lla;
+        lla.lat = INT32_RAD_OF_DEG(DL_MOVE_WP_lat(dl_buffer));
+        lla.lon = INT32_RAD_OF_DEG(DL_MOVE_WP_lon(dl_buffer));
+        /* WP_alt from message is alt above MSL in cm
+         * lla.alt is above ellipsoid in mm
+         */
+        lla.alt = DL_MOVE_WP_alt(dl_buffer)*10 - state.ned_origin_i.hmsl +
+          state.ned_origin_i.lla.alt;
+        nav_move_waypoint_lla(wp_id, &lla);
+      }
     }
     break;
 #endif /* USE_NAVIGATION */
+#ifdef RADIO_CONTROL_TYPE_DATALINK
+  case DL_RC_3CH :
+#ifdef RADIO_CONTROL_DATALINK_LED
+    LED_TOGGLE(RADIO_CONTROL_DATALINK_LED);
+#endif
+    parse_rc_3ch_datalink(
+        DL_RC_3CH_throttle_mode(dl_buffer),
+        DL_RC_3CH_roll(dl_buffer),
+        DL_RC_3CH_pitch(dl_buffer));
+    break;
+  case DL_RC_4CH :
+#ifdef RADIO_CONTROL_DATALINK_LED
+    LED_TOGGLE(RADIO_CONTROL_DATALINK_LED);
+#endif
+    parse_rc_4ch_datalink(
+        DL_RC_4CH_mode(dl_buffer),
+        DL_RC_4CH_throttle(dl_buffer),
+        DL_RC_4CH_roll(dl_buffer),
+        DL_RC_4CH_pitch(dl_buffer),
+        DL_RC_4CH_yaw(dl_buffer));
+    break;
+#endif // RADIO_CONTROL_TYPE_DATALINK
   default:
     break;
   }

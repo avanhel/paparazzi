@@ -88,6 +88,7 @@ $(OBJDIR)/%.o: %.cpp $(OBJDIR)/../Makefile.ac
 	$(Q)test -d $(dir $@) || mkdir -p $(dir $@)
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
+.PHONY: all compile check_jsbsim
 
 #
 # Dependencies
@@ -98,7 +99,5 @@ $(OBJDIR)/.depend:
 	$(Q)$(CC) -MM -MG $(CFLAGS) $($(TARGET).srcs) | sed 's|\([^\.]*\.o\)|$(OBJDIR)/\1|' > $@
 
 ifneq ($(MAKECMDGOALS),clean)
-ifneq ($(MAKECMDGOALS),erase)
 -include $(OBJDIR)/.depend
-endif
 endif

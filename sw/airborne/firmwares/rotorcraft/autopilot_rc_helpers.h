@@ -19,9 +19,16 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file firmwares/rotorcraft/autopilot_rc_helpers.h
+ *
+ * Some helper functions to check RC sticks.
+ */
+
 #ifndef AUTOPILOT_RC_HELPERS_H
 #define AUTOPILOT_RC_HELPERS_H
 
+#include "generated/airframe.h"
 #include "subsystems/radio_control.h"
 
 #define AUTOPILOT_THROTTLE_THRESHOLD      (MAX_PPRZ / 20)
@@ -61,6 +68,16 @@ static inline bool_t kill_switch_is_on(void) {
   return FALSE;
 }
 #endif
+
+static inline uint8_t percent_from_rc(int channel)
+{
+  int per = (MAX_PPRZ + (int32_t)radio_control.values[channel]) * 50 / MAX_PPRZ;
+  if (per < 0)
+    per = 0;
+  else if (per > 100)
+    per = 100;
+  return per;
+}
 
 
 #endif /* AUTOPILOT_RC_HELPERS_H */

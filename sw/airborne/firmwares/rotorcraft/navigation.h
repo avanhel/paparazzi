@@ -19,6 +19,12 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file firmwares/rotorcraft/navigation.h
+ *
+ * Rotorcraft navigation functions.
+ */
+
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
 
@@ -35,7 +41,6 @@
 extern struct EnuCoor_i navigation_target;
 extern struct EnuCoor_i navigation_carrot;
 
-extern struct EnuCoor_f waypoints_float[];
 extern struct EnuCoor_i waypoints[];
 extern const uint8_t nb_waypoint;
 
@@ -74,8 +79,10 @@ void compute_dist2_to_home(void);
 unit_t nav_reset_reference( void ) __attribute__ ((unused));
 unit_t nav_reset_alt( void ) __attribute__ ((unused));
 void nav_periodic_task(void);
+void nav_move_waypoint_lla(uint8_t wp_id, struct LlaCoor_i* new_lla_pos);
 void nav_move_waypoint(uint8_t wp_id, struct EnuCoor_i * new_pos);
 bool_t nav_detect_ground(void);
+bool_t nav_is_in_flight(void);
 
 void nav_home(void);
 
@@ -86,7 +93,7 @@ void nav_home(void);
 #define NavSetGroundReferenceHere() ({ nav_reset_reference(); FALSE; })
 #define NavSetAltitudeReferenceHere() ({ nav_reset_alt(); FALSE; })
 
-#define NavSetWaypointHere(_wp) ({ VECT2_COPY(waypoints[_wp], ins_enu_pos); FALSE; })
+#define NavSetWaypointHere(_wp) ({ VECT2_COPY(waypoints[_wp], *stateGetPositionEnu_i()); FALSE; })
 #define NavCopyWaypoint(_wp1, _wp2) ({ VECT2_COPY(waypoints[_wp1], waypoints[_wp2]); FALSE; })
 
 #define WaypointX(_wp)    POS_FLOAT_OF_BFP(waypoints[_wp].x)
@@ -192,9 +199,9 @@ bool_t nav_approaching_from(uint8_t wp_idx, uint8_t from_idx);
 }
 
 
-#define GetPosX() POS_FLOAT_OF_BFP(ins_enu_pos.x)
-#define GetPosY() POS_FLOAT_OF_BFP(ins_enu_pos.y)
-#define GetPosAlt() (POS_FLOAT_OF_BFP(ins_enu_pos.z+ground_alt))
+#define GetPosX() (stateGetPositionEnu_f()->x)
+#define GetPosY() (stateGetPositionEnu_f()->y)
+#define GetPosAlt() (stateGetPositionEnu_f()->z+ground_alt)
 
 
 extern void navigation_update_wp_from_speed(uint8_t wp, struct Int16Vect3 speed_sp, int16_t heading_rate_sp );

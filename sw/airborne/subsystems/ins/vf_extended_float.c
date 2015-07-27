@@ -20,7 +20,18 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file subsystems/ins/vf_extended_float.c
+ *
+ * Extended vertical filter (in float).
+ *
+ * Estimates altitude, vertical speed, accelerometer bias
+ * and barometer offset.
+ */
+
 #include "subsystems/ins/vf_extended_float.h"
+#include "generated/airframe.h"
+#include "std.h"
 
 #define DEBUG_VFF_EXTENDED 1
 
@@ -29,6 +40,14 @@
 #include "messages.h"
 #include "subsystems/datalink/downlink.h"
 #endif
+
+#ifndef INS_PROPAGATE_FREQUENCY
+#define INS_PROPAGATE_FREQUENCY PERIODIC_FREQUENCY
+#endif
+PRINT_CONFIG_VAR(INS_PROPAGATE_FREQUENCY)
+
+#define DT_VFILTER (1./(INS_PROPAGATE_FREQUENCY))
+
 
 /*
 
@@ -43,8 +62,8 @@ temps :
 #define INIT_PXX 1.
 /* process noise */
 #define ACCEL_NOISE 0.5
-#define Qzz       ACCEL_NOISE/512./512./2.
-#define Qzdotzdot ACCEL_NOISE/512.
+#define Qzz       ACCEL_NOISE * DT_VFILTER * DT_VFILTER / 2.
+#define Qzdotzdot ACCEL_NOISE * DT_VFILTER
 #define Qbiasbias 1e-7
 #define Qoffoff 1e-4
 #define R_BARO 1.
@@ -62,6 +81,17 @@ float vff_P[VFF_STATE_SIZE][VFF_STATE_SIZE];
 float vff_z_meas;
 float vff_z_meas_baro;
 
+#if DOWNLINK
+#include "subsystems/datalink/telemetry.h"
+
+static void send_vffe(void) {
+  DOWNLINK_SEND_VFF_EXTENDED(DefaultChannel, DefaultDevice,
+      &vff_z_meas, &vff_z_meas_baro,
+      &vff_z, &vff_zdot, &vff_zdotdot,
+      &vff_bias, &vff_offset);
+}
+#endif
+
 void vff_init(float init_z, float init_zdot, float init_accel_bias, float init_baro_offset) {
   vff_z = init_z;
   vff_zdot = init_zdot;
@@ -74,6 +104,9 @@ void vff_init(float init_z, float init_zdot, float init_accel_bias, float init_b
     vff_P[i][i] = INIT_PXX;
   }
 
+#if DOWNLINK
+  register_periodic_telemetry(DefaultPeriodic, "VFF_EXTENDED", send_vffe);
+#endif
 }
 
 
@@ -125,7 +158,7 @@ void vff_propagate(float accel) {
   vff_P[3][3] = FPF33 + Qoffoff;
 
 #if DEBUG_VFF_EXTENDED
-  RunOnceEvery(10, DOWNLINK_SEND_VFF_EXTENDED(DefaultChannel, DefaultDevice, &vff_z_meas, &vff_z_meas_baro, &vff_z, &vff_zdot, &vff_zdotdot, &vff_bias, &vff_offset));
+  RunOnceEvery(10, send_vffe());
 #endif
 }
 

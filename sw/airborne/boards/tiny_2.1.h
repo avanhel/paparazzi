@@ -86,6 +86,12 @@
 #define Set_GPS_RESET_Pin_LOW() LED_ON(GPS_RESET)
 #define Open_GPS_RESET_Pin() ClearBit(LED_DIR(GPS_RESET), LED_PIN(GPS_RESET))
 
+/* Default actuators driver */
+#define DEFAULT_ACTUATORS "subsystems/actuators/actuators_4017.h"
+#define ActuatorDefaultSet(_x,_y) Actuator4017Set(_x,_y)
+#define ActuatorsDefaultInit() Actuators4017Init()
+#define ActuatorsDefaultCommit() Actuators4017Commit()
+
 /* P0.5 aka MAT0.1  */
 #define SERVO_CLOCK_PIN  5
 #define SERVO_CLOCK_PINSEL PINSEL0
@@ -185,11 +191,23 @@
 
 #define SPI_SELECT_SLAVE0_PORT 0
 #define SPI_SELECT_SLAVE0_PIN 20
+#define SPI_SELECT_SLAVE0_PINSEL PINSEL1
+#define SPI_SELECT_SLAVE0_PINSEL_BIT 8
+#define SPI_SELECT_SLAVE0_PINSEL_VAL 0
 
 #define SPI1_DRDY_PINSEL PINSEL1
 #define SPI1_DRDY_PINSEL_BIT   0
 #define SPI1_DRDY_PINSEL_VAL   1
 #define SPI1_DRDY_EINT         0
 #define SPI1_DRDY_VIC_IT       VIC_EINT0
+
+
+/* MAX1168 EOC pin (e.g. booz2 imu) */
+#define MAX1168_EOC_PIN 16
+#define MAX1168_EOC_PINSEL PINSEL1
+#define MAX1168_EOC_PINSEL_BIT 0
+#define MAX1168_EOC_PINSEL_VAL 1
+#define MAX1168_EOC_EINT 0
+#define MAX1168_EOC_VIC_IT VIC_EINT0
 
 #endif /* CONFIG_TINY_H */

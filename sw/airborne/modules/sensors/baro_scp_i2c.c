@@ -9,6 +9,7 @@
 
 #include "mcu_periph/sys_time.h"
 #include "mcu_periph/i2c.h"
+#include "subsystems/abi.h"
 #include "led.h"
 
 #include "mcu_periph/uart.h"
@@ -19,9 +20,6 @@
 #warning set SENSOR_SYNC_SEND to use baro_scp_i2c
 #endif
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 uint8_t  baro_scp_status;
 uint32_t baro_scp_pressure;
@@ -39,7 +37,7 @@ static void baro_scp_start_high_res_measurement(void) {
   /* switch to high resolution */
   scp_trans.buf[0] = SCP1000_OPERATION;
   scp_trans.buf[1] = SCP1000_HIGH_RES;
-  I2CTransmit(SCP_I2C_DEV, scp_trans, SCP1000_SLAVE_ADDR, 2);
+  i2c_transmit(&SCP_I2C_DEV, &scp_trans, SCP1000_SLAVE_ADDR, 2);
 }
 
 void baro_scp_init( void ) {
@@ -48,7 +46,7 @@ void baro_scp_init( void ) {
 
 void baro_scp_periodic( void ) {
 
-  if (baro_scp_status == BARO_SCP_UNINIT && cpu_time_sec > 1) {
+  if (baro_scp_status == BARO_SCP_UNINIT && sys_time.nb_sec > 1) {
 
     baro_scp_start_high_res_measurement();
     baro_scp_status = BARO_SCP_IDLE;
@@ -57,7 +55,7 @@ void baro_scp_periodic( void ) {
     /* init: start two byte temperature */
     scp_trans.buf[0] = SCP1000_TEMPOUT;
     baro_scp_status = BARO_SCP_RD_TEMP;
-    I2CTransceive(SCP_I2C_DEV, scp_trans, SCP1000_SLAVE_ADDR, 1, 2);
+    i2c_transceive(&SCP_I2C_DEV, &scp_trans, SCP1000_SLAVE_ADDR, 1, 2);
   }
 }
 
@@ -78,7 +76,7 @@ void baro_scp_event( void ) {
       /* start one byte msb pressure */
       scp_trans.buf[0] = SCP1000_DATARD8;
       baro_scp_status = BARO_SCP_RD_PRESS_0;
-      I2CTransceive(SCP_I2C_DEV, scp_trans, SCP1000_SLAVE_ADDR, 1, 1);
+      i2c_transceive(&SCP_I2C_DEV, &scp_trans, SCP1000_SLAVE_ADDR, 1, 1);
     }
 
     else if (baro_scp_status == BARO_SCP_RD_PRESS_0) {
@@ -89,7 +87,7 @@ void baro_scp_event( void ) {
       /* start two byte lsb pressure */
       scp_trans.buf[0] = SCP1000_DATARD16;
       baro_scp_status = BARO_SCP_RD_PRESS_1;
-      I2CTransceive(SCP_I2C_DEV, scp_trans, SCP1000_SLAVE_ADDR, 1, 2);
+      i2c_transceive(&SCP_I2C_DEV, &scp_trans, SCP1000_SLAVE_ADDR, 1, 2);
     }
 
     else if (baro_scp_status == BARO_SCP_RD_PRESS_1) {
@@ -99,6 +97,8 @@ void baro_scp_event( void ) {
       baro_scp_pressure |= scp_trans.buf[1];
       baro_scp_pressure *= 25;
 
+      float pressure = (float) baro_scp_pressure;
+      AbiSendMsgBARO_ABS(BARO_SCP_SENDER_ID, &pressure);
 #ifdef SENSOR_SYNC_SEND
       DOWNLINK_SEND_SCP_STATUS(DefaultChannel, DefaultDevice, &baro_scp_pressure, &baro_scp_temperature);
 #endif

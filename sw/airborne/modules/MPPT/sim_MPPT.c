@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2009  ENAC, Pascal Brisset, Michel Gorraz
  *
  * This file is part of paparazzi.
@@ -24,9 +22,6 @@
 
 
 #include "MPPT.h"
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 #include "messages.h"
 #include "subsystems/datalink/downlink.h"
 

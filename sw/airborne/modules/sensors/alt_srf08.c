@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2005  Pascal Brisset, Antoine Drouin
  * Copyright (C) 2002  Chris efstathiou hendrix@otenet.gr
  *
@@ -22,8 +20,10 @@
  * Boston, MA 02111-1307, USA.
  *
  */
-/** \file srf08.c
- *  \brief Basic library for SRF08 telemeter
+
+/**
+ * @file modules/sensors/alt_srf08.c
+ * @brief Basic library for SRF08 telemeter
  *
  */
 
@@ -34,9 +34,6 @@
 #include "subsystems/datalink/downlink.h"
 #include "led.h"
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #ifndef SRF08_I2C_DEV
 #define SRF08_I2C_DEV i2c0
@@ -57,12 +54,12 @@ void srf08_init(void)
 
   srf_trans.buf[0] = 0x00;
   srf_trans.buf[1] = 0x51;
-  I2CTransmit(SRF08_I2C_DEV, srf_trans, SRF08_UNIT_0, 2);
+  i2c_transmit(&SRF08_I2C_DEV, &srf_trans, SRF08_UNIT_0, 2);
 
   /** Setting the gain to the minimun value (to avoid echos ?) */
   srf_trans.buf[0] = SRF08_SET_GAIN;
   srf_trans.buf[1] = SRF08_MIN_GAIN;
-  I2CTransmit(SRF08_I2C_DEV, srf_trans, SRF08_UNIT_0, 2);
+  i2c_transmit(&SRF08_I2C_DEV, &srf_trans, SRF08_UNIT_0, 2);
 
   return;
 }
@@ -72,7 +69,7 @@ void srf08_initiate_ranging(void) {
 LED_ON(2);
   srf_trans.buf[0] = SRF08_COMMAND;
   srf_trans.buf[1] = SRF08_CENTIMETERS;
-  I2CTransmit(SRF08_I2C_DEV, srf_trans, SRF08_UNIT_0, 2);
+  i2c_transmit(&SRF08_I2C_DEV, &srf_trans, SRF08_UNIT_0, 2);
 }
 
 /** Ask the value to the device */
@@ -80,13 +77,13 @@ void srf08_receive(void) {
 LED_OFF(2);
   srf_trans.buf[0] = SRF08_ECHO_1;
   srf08_received = TRUE;
-  I2CTransmit(SRF08_I2C_DEV, srf_trans, SRF08_UNIT_0, 1);
+  i2c_transmit(&SRF08_I2C_DEV, &srf_trans, SRF08_UNIT_0, 1);
 }
 
 /** Read values on the bus */
 void srf08_read(void) {
   srf08_got = TRUE;
-  I2CReceive(SRF08_I2C_DEV, srf_trans, SRF08_UNIT_0, 2);
+  i2c_receive(&SRF08_I2C_DEV, &srf_trans, SRF08_UNIT_0, 2);
 }
 
 /** Copy the I2C buffer */
@@ -121,7 +118,7 @@ uint32_t srf08_read_register(uint8_t srf08_register)
   else
     cnt = 1;
 
-  I2CTransceive(SRF08_I2C_DEV, srf_trans, SRF08_UNIT_0, 1, cnt);
+  i2c_transceive(&SRF08_I2C_DEV, &srf_trans, SRF08_UNIT_0, 1, cnt);
 
   /* get high byte msb first */
   if(srf08_register>=2) {

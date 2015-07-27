@@ -1,6 +1,4 @@
 /*
- * $Id: booz_fms_test_signal.c 4675 2010-03-13 22:59:46Z poine $
- *
  * Copyright (C) 2008-2009 Antoine Drouin <poinix@gmail.com>
  *
  * This file is part of paparazzi.
@@ -69,7 +67,7 @@ void booz_fms_impl_periodic(void) {
 #if 0
   case BOOZ_FMS_TEST_SIGNAL_MODE_VERTICAL: {
     if (guidance_v_mode < GUIDANCE_V_MODE_HOVER)
-      booz_fms_test_signal_start_z = ins_ltp_pos.z;
+      booz_fms_test_signal_start_z = ins_impl.ltp_pos.z;
     else {
       booz_fms_input.v_sp.height = (booz_fms_test_signal_counter < booz_fms_test_signal_period) ?
 	booz_fms_test_signal_start_z :

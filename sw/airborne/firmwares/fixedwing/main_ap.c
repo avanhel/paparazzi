@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2003-2010  The Paparazzi Team
  *
  * This file is part of paparazzi.
@@ -19,18 +17,20 @@
  * along with paparazzi; see the file COPYING.  If not, write to
  * the Free Software Foundation, 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
- *
  */
 
 /**
- * @file main_ap.c
+ * @file firmwares/fixedwing/main_ap.c
+ *
  * AP ( AutoPilot ) tasks
  *
- * This process is reponsible for the collecting the different sensors data, fusing them to obtain
- * aircraft attitude and running the different control loops
+ * This process is reponsible for the collecting the different sensors data,
+ * calling the appropriate estimation algorithms and running the different control loops.
  */
 
 #define MODULES_C
+
+#define ABI_C
 
 #include <math.h>
 
@@ -38,7 +38,7 @@
 #include "mcu.h"
 #include "mcu_periph/sys_time.h"
 
-#include "link_mcu.h"
+#include "link_mcu_spi.h"
 
 // Sensors
 #if USE_GPS
@@ -53,10 +53,17 @@
 #if USE_AHRS_ALIGNER
 #include "subsystems/ahrs/ahrs_aligner.h"
 #endif
+#include "subsystems/air_data.h"
+#if USE_BARO_BOARD
+PRINT_CONFIG_MSG("USE_BARO_BOARD is TRUE: Reading onboard baro.")
+#include "subsystems/sensors/baro.h"
+#endif
+#include "subsystems/ins.h"
+
 
 // autopilot & control
+#include "state.h"
 #include "firmwares/fixedwing/autopilot.h"
-#include "estimator.h"
 #include "firmwares/fixedwing/stabilization/stabilization_attitude.h"
 #include CTRL_TYPE_H
 #include "subsystems/nav.h"
@@ -67,9 +74,10 @@
 
 // datalink & telemetry
 #include "subsystems/datalink/datalink.h"
+#include "subsystems/datalink/telemetry.h"
 #include "subsystems/settings.h"
 #include "subsystems/datalink/xbee.h"
-#include "firmwares/fixedwing/ap_downlink.h"
+#include "subsystems/datalink/w5100.h"
 
 // modules & settings
 #include "generated/modules.h"
@@ -77,60 +85,85 @@
 #if defined RADIO_CONTROL || defined RADIO_CONTROL_AUTO1
 #include "rc_settings.h"
 #endif
+#include "subsystems/abi.h"
 
-#include "gpio.h"
 #include "led.h"
 
+#ifdef USE_NPS
+#include "nps_autopilot.h"
+#endif
 
-#if USE_AHRS
-#if USE_IMU
+/* Default trim commands for roll, pitch and yaw */
+#ifndef COMMAND_ROLL_TRIM
+#define COMMAND_ROLL_TRIM 0
+#endif
+
+#ifndef COMMAND_PITCH_TRIM
+#define COMMAND_PITCH_TRIM 0
+#endif
+
+#ifndef COMMAND_YAW_TRIM
+#define COMMAND_YAW_TRIM 0
+#endif
+
+/* if PRINT_CONFIG is defined, print some config options */
+PRINT_CONFIG_VAR(PERIODIC_FREQUENCY)
+PRINT_CONFIG_VAR(NAVIGATION_FREQUENCY)
+PRINT_CONFIG_VAR(CONTROL_FREQUENCY)
+
+/* TELEMETRY_FREQUENCY is defined in generated/periodic_telemetry.h
+ * defaults to 60Hz or set by TELEMETRY_FREQUENCY configure option in airframe file
+ */
+PRINT_CONFIG_VAR(TELEMETRY_FREQUENCY)
+
+/* MODULES_FREQUENCY is defined in generated/modules.h
+ * according to main_freq parameter set for modules in airframe file
+ */
+PRINT_CONFIG_VAR(MODULES_FREQUENCY)
+
+
+#if USE_AHRS && USE_IMU
+
+#ifndef AHRS_PROPAGATE_FREQUENCY
+#define AHRS_PROPAGATE_FREQUENCY PERIODIC_FREQUENCY
+#endif
+PRINT_CONFIG_VAR(AHRS_PROPAGATE_FREQUENCY)
+#ifndef AHRS_CORRECT_FREQUENCY
+#define AHRS_CORRECT_FREQUENCY PERIODIC_FREQUENCY
+#endif
+PRINT_CONFIG_VAR(AHRS_CORRECT_FREQUENCY)
+
+#if (AHRS_PROPAGATE_FREQUENCY > PERIODIC_FREQUENCY)
+#warning "PERIODIC_FREQUENCY should be least equal or greater than AHRS_PROPAGATE_FREQUENCY"
+INFO_VALUE("it is recommended to configure in your airframe PERIODIC_FREQUENCY to at least ",AHRS_PROPAGATE_FREQUENCY)
+#endif
+
 static inline void on_gyro_event( void );
 static inline void on_accel_event( void );
 static inline void on_mag_event( void );
 volatile uint8_t ahrs_timeout_counter = 0;
-#endif // USE_IMU
-#endif // USE_AHRS
+
+//FIXME not the correct place
+static void send_fliter_status(void) {
+  uint8_t mde = 3;
+  if (ahrs.status == AHRS_UNINIT) mde = 2;
+  if (ahrs_timeout_counter > 10) mde = 5;
+  uint16_t val = 0;
+  DOWNLINK_SEND_STATE_FILTER_STATUS(DefaultChannel, DefaultDevice, &mde, &val);
+}
+
+#endif // USE_AHRS && USE_IMU
 
 #if USE_GPS
 static inline void on_gps_solution( void );
 #endif
 
-
-bool_t power_switch;
-
 // what version is this ????
 static const uint16_t version = 1;
-
-uint8_t pprz_mode = PPRZ_MODE_AUTO2;
-uint8_t lateral_mode = LATERAL_MODE_MANUAL;
-
-static uint8_t  mcu1_status;
 
 #if defined RADIO_CONTROL || defined RADIO_CONTROL_AUTO1
 static uint8_t  mcu1_ppm_cpt;
 #endif
-
-bool_t kill_throttle = FALSE;
-
-bool_t launch = FALSE;
-
-
-/** Supply voltage in deciVolt.
- * This the ap copy of the measurement from fbw
- */
-uint8_t vsupply;
-
-/** Supply current in milliAmpere.
- * This the ap copy of the measurement from fbw
- */
-static int32_t current;	// milliAmpere
-
-/** Fuel consumption (mAh)
- * TODO: move to electrical subsystem
- */
-float energy;
-
-bool_t gps_lost = FALSE;
 
 
 tid_t modules_tid;     ///< id for modules_periodic_task() timer
@@ -146,17 +179,20 @@ void init_ap( void ) {
   mcu_init();
 #endif /* SINGLE_MCU */
 
+  /****** initialize and reset state interface ********/
+
+  stateInit();
+
   /************* Sensors initialization ***************/
 #if USE_GPS
   gps_init();
 #endif
 
-#ifdef USE_GPIO
-  GpioInit();
-#endif
-
 #if USE_IMU
   imu_init();
+#if USE_IMU_FLOAT
+  imu_float_init();
+#endif
 #endif
 
 #if USE_AHRS_ALIGNER
@@ -167,12 +203,19 @@ void init_ap( void ) {
   ahrs_init();
 #endif
 
-#if USE_INS
-  ins_init();
+#if USE_AHRS && USE_IMU
+  register_periodic_telemetry(DefaultPeriodic, "STATE_FILTER_STATUS", send_fliter_status);
 #endif
 
+  air_data_init();
+#if USE_BARO_BOARD
+  baro_init();
+#endif
+
+  ins_init();
+
   /************* Links initialization ***************/
-#if defined MCU_SPI_LINK
+#if defined MCU_SPI_LINK || defined MCU_UART_LINK
   link_mcu_init();
 #endif
 #if USE_AUDIO_TELEMETRY
@@ -180,12 +223,9 @@ void init_ap( void ) {
 #endif
 
   /************ Internal status ***************/
+  autopilot_init();
   h_ctl_init();
   v_ctl_init();
-  estimator_init();
-#ifdef ALT_KALMAN
-  alt_kalman_init();
-#endif
   nav_init();
 
   modules_init();
@@ -197,7 +237,7 @@ void init_ap( void ) {
   navigation_tid = sys_time_register_timer(1./NAVIGATION_FREQUENCY, NULL);
   attitude_tid = sys_time_register_timer(1./CONTROL_FREQUENCY, NULL);
   modules_tid = sys_time_register_timer(1./MODULES_FREQUENCY, NULL);
-  telemetry_tid = sys_time_register_timer(1./60, NULL);
+  telemetry_tid = sys_time_register_timer(1./TELEMETRY_FREQUENCY, NULL);
   monitor_tid = sys_time_register_timer(1.0, NULL);
 
   /** - start interrupt task */
@@ -207,6 +247,9 @@ void init_ap( void ) {
 #if DATALINK == XBEE
   xbee_init();
 #endif
+#if DATALINK == W5100
+  w5100_init();
+#endif
 #endif /* DATALINK */
 
 #if defined AEROCOMM_DATA_PIN
@@ -214,13 +257,18 @@ void init_ap( void ) {
   IO0SET = _BV(AEROCOMM_DATA_PIN);
 #endif
 
-  power_switch = FALSE;
-
   /************ Multi-uavs status ***************/
 
 #ifdef TRAFFIC_INFO
   traffic_info_init();
 #endif
+
+  /* set initial trim values.
+   * these are passed to fbw via inter_mcu.
+   */
+  ap_state->command_roll_trim = COMMAND_ROLL_TRIM;
+  ap_state->command_pitch_trim = COMMAND_PITCH_TRIM;
+  ap_state->command_yaw_trim = COMMAND_YAW_TRIM;
 }
 
 
@@ -266,7 +314,7 @@ static inline uint8_t pprz_mode_update( void ) {
 #ifndef RADIO_AUTO_MODE
     return ModeUpdate(pprz_mode, PPRZ_MODE_OF_PULSE(fbw_state->channels[RADIO_MODE]));
 #else
-#pragma message "Using RADIO_AUTO_MODE to switch between AUTO1 and AUTO2."
+    INFO("Using RADIO_AUTO_MODE to switch between AUTO1 and AUTO2.")
     /* If RADIO_AUTO_MODE is enabled mode swithing will be seperated between two switches/channels
      * RADIO_MODE will switch between PPRZ_MODE_MANUAL and any PPRZ_MODE_AUTO mode selected by RADIO_AUTO_MODE.
      *
@@ -345,8 +393,7 @@ static inline void telecommand_task( void ) {
 #endif
   }
   mode_changed |= mcu1_status_update();
-  if ( mode_changed )
-    PERIODIC_SEND_PPRZ_MODE(DefaultChannel, DefaultDevice);
+  if ( mode_changed ) autopilot_send_mode();
 
 #if defined RADIO_CONTROL || defined RADIO_CONTROL_AUTO1
   /** In AUTO1 mode, compute roll setpoint and pitch setpoint from
@@ -375,7 +422,7 @@ static inline void telecommand_task( void ) {
   current = fbw_state->current;
 
 #ifdef RADIO_CONTROL
-  if (!estimator_flight_time) {
+  if (!autopilot_flight_time) {
     if (pprz_mode == PPRZ_MODE_AUTO2 && fbw_state->channels[RADIO_THROTTLE] > THROTTLE_THRESHOLD_TAKEOFF) {
       launch = TRUE;
     }
@@ -400,7 +447,8 @@ void reporting_task( void ) {
   }
   /** then report periodicly */
   else {
-    PeriodicSendAp(DefaultChannel, DefaultDevice);
+    //PeriodicSendAp(DefaultChannel, DefaultDevice);
+    periodic_telemetry_send_Ap();
   }
 }
 
@@ -424,15 +472,14 @@ void navigation_task( void ) {
       if (pprz_mode == PPRZ_MODE_AUTO2 || pprz_mode == PPRZ_MODE_HOME) {
         last_pprz_mode = pprz_mode;
         pprz_mode = PPRZ_MODE_GPS_OUT_OF_ORDER;
-        PERIODIC_SEND_PPRZ_MODE(DefaultChannel, DefaultDevice);
+        autopilot_send_mode();
         gps_lost = TRUE;
       }
     } else if (gps_lost) { /* GPS is ok */
       /** If aircraft was in failsafe mode, come back in previous mode */
       pprz_mode = last_pprz_mode;
       gps_lost = FALSE;
-
-      PERIODIC_SEND_PPRZ_MODE(DefaultChannel, DefaultDevice);
+      autopilot_send_mode();
     }
   }
 #endif /* GPS && FAILSAFE_DELAY_WITHOUT_GPS */
@@ -449,11 +496,9 @@ void navigation_task( void ) {
   CallTCAS();
 #endif
 
-#ifndef PERIOD_NAVIGATION_0 // If not sent periodically (in default 0 mode)
+#ifndef PERIOD_NAVIGATION_Ap_0 // If not sent periodically (in default 0 mode)
   SEND_NAVIGATION(DefaultChannel, DefaultDevice);
 #endif
-
-  SEND_CAM(DefaultChannel, DefaultDevice);
 
   /* The nav task computes only nav_altitude. However, we are interested
      by desired_altitude (= nav_alt+alt_shift) in any case.
@@ -476,10 +521,8 @@ void navigation_task( void ) {
 }
 
 
-#if USE_AHRS
 #ifdef AHRS_TRIGGERED_ATTITUDE_LOOP
 volatile uint8_t new_ins_attitude = 0;
-#endif
 #endif
 
 void attitude_loop( void ) {
@@ -490,8 +533,10 @@ void attitude_loop( void ) {
 
   if (pprz_mode >= PPRZ_MODE_AUTO2)
   {
-    if (v_ctl_mode == V_CTL_MODE_AUTO_THROTTLE)
+    if (v_ctl_mode == V_CTL_MODE_AUTO_THROTTLE) {
       v_ctl_throttle_setpoint = nav_throttle_setpoint;
+      v_ctl_pitch_setpoint = nav_pitch;
+    }
     else if (v_ctl_mode >= V_CTL_MODE_AUTO_CLIMB)
     {
       v_ctl_climb_loop();
@@ -508,9 +553,9 @@ void attitude_loop( void ) {
     }
 #endif
 
-    h_ctl_pitch_setpoint = nav_pitch;
+    h_ctl_pitch_setpoint = v_ctl_pitch_setpoint; // Copy the pitch setpoint from the guidance to the stabilization control
     Bound(h_ctl_pitch_setpoint, H_CTL_PITCH_MIN_SETPOINT, H_CTL_PITCH_MAX_SETPOINT);
-    if (kill_throttle || (!estimator_flight_time && !launch))
+    if (kill_throttle || (!autopilot_flight_time && !launch))
       v_ctl_throttle_setpoint = 0;
   }
 
@@ -521,7 +566,7 @@ void attitude_loop( void ) {
 
   ap_state->commands[COMMAND_PITCH] = h_ctl_elevator_setpoint;
 
-#if defined MCU_SPI_LINK
+#if defined MCU_SPI_LINK || defined MCU_UART_LINK
   link_mcu_send();
 #elif defined INTER_MCU && defined SINGLE_MCU
   /**Directly set the flag indicating to FBW that shared buffer is available*/
@@ -543,13 +588,15 @@ void sensors_task( void ) {
 #endif // USE_IMU
 
   //FIXME: this is just a kludge
-#if USE_AHRS && defined SITL
+#if USE_AHRS && defined SITL && !USE_NPS
   ahrs_propagate();
 #endif
 
-#if USE_INS
-  ins_periodic_task();
+#if USE_BARO_BOARD
+  baro_periodic();
 #endif
+
+  ins_periodic();
 }
 
 
@@ -568,8 +615,8 @@ void sensors_task( void ) {
 
 /** monitor stuff run at 1Hz */
 void monitor_task( void ) {
-  if (estimator_flight_time)
-    estimator_flight_time++;
+  if (autopilot_flight_time)
+    autopilot_flight_time++;
 #if defined DATALINK || defined SITL
   datalink_time++;
 #endif
@@ -582,17 +629,14 @@ void monitor_task( void ) {
   kill_throttle |= (t >= LOW_BATTERY_DELAY);
   kill_throttle |= launch && (dist2_to_home > Square(KILL_MODE_DISTANCE));
 
-  if (!estimator_flight_time &&
-      estimator_hspeed_mod > MIN_SPEED_FOR_TAKEOFF) {
-    estimator_flight_time = 1;
+  if (!autopilot_flight_time &&
+      *stateGetHorizontalSpeedNorm_f() > MIN_SPEED_FOR_TAKEOFF) {
+    autopilot_flight_time = 1;
     launch = TRUE; /* Not set in non auto launch */
     uint16_t time_sec = sys_time.nb_sec;
     DOWNLINK_SEND_TAKEOFF(DefaultChannel, DefaultDevice, &time_sec);
   }
 
-#ifdef USE_GPIO
-   GpioUpdate1();
-#endif
 }
 
 
@@ -609,7 +653,8 @@ void event_task_ap( void ) {
   ImuEvent(on_gyro_event, on_accel_event, on_mag_event);
 #endif
 
-#if USE_INS
+#ifdef InsEvent
+  TODO("calling InsEvent, remove me..")
   InsEvent(NULL);
 #endif
 
@@ -617,11 +662,14 @@ void event_task_ap( void ) {
   GpsEvent(on_gps_solution);
 #endif /* USE_GPS */
 
+#if USE_BARO_BOARD
+  BaroEvent();
+#endif
 
   DatalinkEvent();
 
 
-#ifdef MCU_SPI_LINK
+#if defined MCU_SPI_LINK || defined MCU_UART_LINK
   link_mcu_event_task();
 #endif
 
@@ -637,7 +685,6 @@ void event_task_ap( void ) {
   if (new_ins_attitude > 0)
   {
     attitude_loop();
-    //LED_TOGGLE(3);
     new_ins_attitude = 0;
   }
 #endif
@@ -647,7 +694,7 @@ void event_task_ap( void ) {
 
 #if USE_GPS
 static inline void on_gps_solution( void ) {
-  estimator_update_state_gps();
+  ins_update_gps();
 #if USE_AHRS
   ahrs_update_gps();
 #endif
@@ -685,11 +732,6 @@ static inline void on_gyro_event( void ) {
 
   ahrs_propagate();
   ahrs_update_accel();
-  ahrs_update_fw_estimator();
-
-#ifdef AHRS_TRIGGERED_ATTITUDE_LOOP
-  new_ins_attitude = 1;
-#endif
 
 #else //PERIODIC_FREQUENCY
   static uint8_t _reduced_propagation_rate = 0;
@@ -703,6 +745,7 @@ static inline void on_gyro_event( void ) {
   _reduced_propagation_rate++;
   if (_reduced_propagation_rate < (PERIODIC_FREQUENCY / AHRS_PROPAGATE_FREQUENCY))
   {
+    return;
   }
   else
   {
@@ -724,14 +767,16 @@ static inline void on_gyro_event( void ) {
       ImuScaleAccel(imu);
       ahrs_update_accel();
     }
-
-    ahrs_update_fw_estimator();
-
-#ifdef AHRS_TRIGGERED_ATTITUDE_LOOP
-    new_ins_attitude = 1;
-#endif
   }
 #endif //PERIODIC_FREQUENCY
+
+#if defined SITL && USE_NPS
+  if (nps_bypass_ahrs) sim_overwrite_ahrs();
+#endif
+
+#ifdef AHRS_TRIGGERED_ATTITUDE_LOOP
+  new_ins_attitude = 1;
+#endif
 
 }
 

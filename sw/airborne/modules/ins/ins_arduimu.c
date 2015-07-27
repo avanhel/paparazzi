@@ -11,7 +11,7 @@ Autoren@ZHAW:   schmiemi
 #include "mcu_periph/i2c.h"
 
 // test
-#include "estimator.h"
+#include "state.h"
 
 // für das Senden von GPS-Daten an den ArduIMU
 #ifndef UBX
@@ -29,9 +29,6 @@ int32_t GPS_Data[14];
 //da ArduIMU das Read/Write Bit selber anfügt.
 #define ArduIMU_SLAVE_ADDR 0x22
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #include "mcu_periph/uart.h"
 #include "messages.h"
@@ -135,7 +132,7 @@ void ArduIMU_periodicGPS( void ) {
       ardu_gps_trans.buf[26] = (uint8_t) (GPS_Data[6] >>8);
       ardu_gps_trans.buf[27] = (uint8_t) (GPS_Data[6] >>16);
       ardu_gps_trans.buf[28] = (uint8_t) (GPS_Data[6] >>24);
-      I2CTransmit(ARDUIMU_I2C_DEV, ardu_gps_trans, ArduIMU_SLAVE_ADDR, 28);
+      i2c_transmit(&ARDUIMU_I2C_DEV, &ardu_gps_trans, ArduIMU_SLAVE_ADDR, 28);
 
       gps_daten_versendet_msg1 = TRUE;
       messageNr =1;
@@ -156,7 +153,7 @@ void ArduIMU_periodicGPS( void ) {
       ardu_gps_trans.buf[11] = GPS_Data[9];		//status flags
       ardu_gps_trans.buf[12] = GPS_Data[10];		//sol gps fix
       ardu_gps_trans.buf[13] = GPS_Data[11];		//sol flags
-      I2CTransmit(ARDUIMU_I2C_DEV, ardu_gps_trans, ArduIMU_SLAVE_ADDR, 13);
+      i2c_transmit(&ARDUIMU_I2C_DEV, &ardu_gps_trans, ArduIMU_SLAVE_ADDR, 13);
 
       gps_daten_versendet_msg2 = TRUE;
       messageNr = 0;
@@ -172,7 +169,7 @@ void ArduIMU_periodic( void ) {
     if (imu_daten_angefordert == TRUE) {
         IMU_Daten_verarbeiten();
     }
-    I2CReceive(ARDUIMU_I2C_DEV, ardu_ins_trans, ArduIMU_SLAVE_ADDR, 12);
+    i2c_receive(&ARDUIMU_I2C_DEV, &ardu_ins_trans, ArduIMU_SLAVE_ADDR, 12);
 
     imu_daten_angefordert = TRUE;
     /*
@@ -209,12 +206,12 @@ void IMU_Daten_verarbeiten( void ) {
     ArduIMU_data[5] = (float) (recievedData[5] / (float)100);
 
     // test
-    estimator_phi  = (float)ArduIMU_data[0]*0.01745329252 - ins_roll_neutral;
-    estimator_theta  = (float)ArduIMU_data[1]*0.01745329252 - ins_pitch_neutral;
+    struct FloatEulers att;
+    att.phi = (float)ArduIMU_data[0]*0.01745329252 - ins_roll_neutral;
+    att.theta = (float)ArduIMU_data[1]*0.01745329252 - ins_pitch_neutral;
+    att.psi = 0.;
     imu_daten_angefordert = FALSE;
+    stateSetNedToBodyEulers_f(&att);
 
-    {
-    float psi=0;
-    RunOnceEvery(15, DOWNLINK_SEND_AHRS_EULER(DefaultChannel, DefaultDevice, &estimator_phi, &estimator_theta, &psi));
-    }
+    RunOnceEvery(15, DOWNLINK_SEND_AHRS_EULER(DefaultChannel, DefaultDevice, &att->phi, &att->theta, &att->psi));
 }

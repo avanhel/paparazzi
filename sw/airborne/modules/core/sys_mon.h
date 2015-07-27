@@ -1,6 +1,4 @@
 /*
- * $Id:  $
- *
  * Copyright (C) 2010  Gautier Hattenberger
  *
  * This file is part of paparazzi.
@@ -36,6 +34,8 @@
 struct SysMon {
   uint8_t  cpu_load;
   uint16_t periodic_time;      ///< in usec
+  uint16_t periodic_time_min;  ///< in usec
+  uint16_t periodic_time_max;  ///< in usec
   uint16_t periodic_cycle;     ///< in usec
   uint16_t periodic_cycle_min; ///< in usec
   uint16_t periodic_cycle_max; ///< in usec

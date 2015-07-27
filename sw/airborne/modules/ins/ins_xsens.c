@@ -20,19 +20,19 @@
  *
  */
 
-/** @file xsens.c
+/** @file ins_xsens.c
  * Parser for the Xsens protocol.
  */
 
 #include "ins_module.h"
 #include "ins_xsens.h"
+#include "subsystems/ins.h"
 
 #include <inttypes.h>
 
 #include "generated/airframe.h"
 
 #include "mcu_periph/sys_time.h"
-#include "subsystems/datalink/downlink.h"
 #include "messages.h"
 
 #if USE_GPS_XSENS
@@ -46,31 +46,37 @@
 bool_t gps_xsens_msg_available;
 #endif
 
+// positions
 INS_FORMAT ins_x;
 INS_FORMAT ins_y;
 INS_FORMAT ins_z;
 
+// velocities
 INS_FORMAT ins_vx;
 INS_FORMAT ins_vy;
 INS_FORMAT ins_vz;
 
+// body angles
 INS_FORMAT ins_phi;
 INS_FORMAT ins_theta;
 INS_FORMAT ins_psi;
 
+// angle rates
 INS_FORMAT ins_p;
 INS_FORMAT ins_q;
 INS_FORMAT ins_r;
 
+// accelerations
 INS_FORMAT ins_ax;
 INS_FORMAT ins_ay;
 INS_FORMAT ins_az;
 
+// magnetic
 INS_FORMAT ins_mx;
 INS_FORMAT ins_my;
 INS_FORMAT ins_mz;
 
-#if USE_INS
+#if USE_INS_MODULE
 float ins_pitch_neutral;
 float ins_roll_neutral;
 #endif
@@ -170,9 +176,6 @@ uint8_t xsens_msg_buf[XSENS_MAX_PAYLOAD];
 #define GOT_CHECKSUM  6
 
 // FIXME Debugging Only
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 #include "mcu_periph/uart.h"
 #include "messages.h"
 #include "subsystems/datalink/downlink.h"
@@ -206,12 +209,15 @@ uint8_t send_ck;
 
 volatile int xsens_configured = 0;
 
-void ins_init( void ) {
+void xsens_init(void);
+void xsens_periodic(void);
+
+void xsens_init(void) {
 
   xsens_status = UNINIT;
   xsens_configured = 20;
 
-#if USE_INS
+#if USE_INS_MODULE
   ins_pitch_neutral = INS_PITCH_NEUTRAL_DEFAULT;
   ins_roll_neutral = INS_ROLL_NEUTRAL_DEFAULT;
 #endif
@@ -226,16 +232,49 @@ void ins_init( void ) {
 struct ImuXsens imu_xsens;
 
 void imu_impl_init(void) {
-  ins_init();
+  xsens_init();
   imu_xsens.gyro_available = FALSE;
   imu_xsens.accel_available = FALSE;
   imu_xsens.mag_available = FALSE;
 }
 
 void imu_periodic(void) {
-  ins_periodic_task();
+  xsens_periodic();
 }
 #endif /* USE_IMU */
+
+#if USE_INS_MODULE
+void ins_init(void) {
+  struct UtmCoor_f utm0 = { nav_utm_north0, nav_utm_east0, 0., nav_utm_zone0 };
+  stateSetLocalUtmOrigin_f(&utm0);
+  stateSetPositionUtm_f(&utm0);
+
+  xsens_init();
+}
+
+void ins_periodic(void) {
+  xsens_periodic();
+}
+
+void ins_update_gps(void) {
+  struct UtmCoor_f utm;
+  utm.east = gps.utm_pos.east / 100.;
+  utm.north = gps.utm_pos.north / 100.;
+  utm.zone = nav_utm_zone0;
+  utm.alt = gps.hmsl / 1000.;
+
+  // set position
+  stateSetPositionUtm_f(&utm);
+
+  struct NedCoor_f ned_vel = {
+    gps.ned_vel.x / 100.,
+    gps.ned_vel.y / 100.,
+    gps.ned_vel.z / 100.
+  };
+  // set velocity
+  stateSetSpeedNed_f(&ned_vel);
+}
+#endif
 
 #if USE_GPS_XSENS
 void gps_impl_init(void) {
@@ -244,7 +283,7 @@ void gps_impl_init(void) {
 }
 #endif
 
-void ins_periodic_task( void ) {
+void xsens_periodic(void) {
   if (xsens_configured > 0)
     {
       switch (xsens_configured)
@@ -305,24 +344,42 @@ void ins_periodic_task( void ) {
   RunOnceEvery(100,XSENS_ReqGPSStatus());
 }
 
-#if USE_INS
-#include "estimator.h"
+#if USE_INS_MODULE
+#include "state.h"
 
 static inline void update_fw_estimator(void) {
   // Send to Estimator (Control)
 #ifdef XSENS_BACKWARDS
-  EstimatorSetAtt((-ins_phi+ins_roll_neutral), (ins_psi + RadOfDeg(180)), (-ins_theta+ins_pitch_neutral));
-  EstimatorSetRate(-ins_p,-ins_q, ins_r);
+  struct FloatEulers att = {
+    -ins_phi+ins_roll_neutral,
+    -ins_theta+ins_pitch_neutral,
+    ins_psi + RadOfDeg(180)
+  };
+  struct FloatRates rates = {
+    -ins_p,
+    -ins_q,
+    ins_r
+  };
 #else
-  EstimatorSetAtt(ins_phi+ins_roll_neutral, ins_psi, ins_theta+ins_pitch_neutral);
-  EstimatorSetRate(ins_p, ins_q, ins_r);
+  struct FloatEulers att = {
+    ins_phi+ins_roll_neutral,
+    ins_theta+ins_pitch_neutral,
+    ins_psi
+  };
+  struct FloatRates rates = {
+    ins_p,
+    ins_q,
+    ins_r
+  };
 #endif
+  stateSetNedToBodyEulers_f(&att);
+  stateSetBodyRates_f(&rates);
 }
-#endif /* USE_INS */
+#endif /* USE_INS_MODULE */
 
 void handle_ins_msg(void) {
 
-#if USE_INS
+#if USE_INS_MODULE
   update_fw_estimator();
 #endif
 
@@ -351,9 +408,6 @@ void handle_ins_msg(void) {
 #endif /* USE_IMU */
 
 #if USE_GPS_XSENS
-  #ifndef ALT_KALMAN
-  #warning NO_VZ
-  #endif
 
   // Horizontal speed
   float fspeed = sqrt(ins_vx*ins_vx + ins_vy*ins_vy);
@@ -368,7 +422,7 @@ void handle_ins_msg(void) {
 #endif // USE_GPS_XSENS
 }
 
-void parse_ins_msg( void ) {
+void parse_ins_msg(void) {
   uint8_t offset = 0;
   if (xsens_id == XSENS_ReqOutputModeAck_ID) {
     xsens_output_mode = XSENS_ReqOutputModeAck_mode(xsens_msg_buf);
@@ -613,7 +667,7 @@ void parse_ins_msg( void ) {
 }
 
 
-void parse_ins_buffer( uint8_t c ) {
+void parse_ins_buffer(uint8_t c) {
   ck += c;
   switch (xsens_status) {
   case UNINIT:

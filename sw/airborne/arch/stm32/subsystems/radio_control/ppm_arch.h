@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2010 The Paparazzi Team
  *
  * This file is part of paparazzi.
@@ -21,8 +19,11 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/** \file booz_radio_control_ppm_hw.h
- *  \brief STM32 ppm decoder
+/**
+ * @file arch/stm32/subsystems/radio_control/ppm_arch.h
+ * @ingroup stm32_arch
+ *
+ * STM32 ppm decoder.
  *
  */
 
@@ -32,14 +33,21 @@
 #include "mcu_periph/sys_time.h"
 
 /**
- * On tiny (and booz) the ppm counter is running at the same speed as
- * the systic counter. There is no reason for this to be true.
- * Let's add a pair of macros to make it possible for them to be different.
+ * The ppm counter is set-up to have 1/6 us resolution.
  *
+ * The timer clock frequency (before prescaling):
+ * STM32F1:
+ *   TIM1 -> APB2 = HCLK = 72MHz
+ *   TIM2 -> 2 * APB1 = 2 * 36MHz = 72MHz
+ * STM32F4:
+ *   TIM1 -> 2 * APB2 = 2 * 84MHz = 168MHz
+ *   TIM2 -> 2 * APB1 = 2 * 42MHz = 84MHz
  */
-#define RC_PPM_TICKS_OF_USEC(_v)        CPU_TICKS_OF_USEC((_v)/9)
-#define RC_PPM_SIGNED_TICKS_OF_USEC(_v) SIGNED_CPU_TICKS_OF_USEC((_v)/9)
-#define USEC_OF_RC_PPM_TICKS(_v)        USEC_OF_CPU_TICKS((_v)*9)
+#define RC_PPM_TICKS_PER_USEC 6
+
+#define RC_PPM_TICKS_OF_USEC(_v)        ((_v)*RC_PPM_TICKS_PER_USEC)
+#define RC_PPM_SIGNED_TICKS_OF_USEC(_v) (int32_t)((_v)*RC_PPM_TICKS_PER_USEC)
+#define USEC_OF_RC_PPM_TICKS(_v)        ((_v)/RC_PPM_TICKS_PER_USEC)
 
 #define PPM_NB_CHANNEL RADIO_CONTROL_NB_CHANNEL
 

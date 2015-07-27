@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2003  Pascal Brisset, Antoine Drouin
  *
  * This file is part of paparazzi.
@@ -19,11 +17,12 @@
  * along with paparazzi; see the file COPYING.  If not, write to
  * the Free Software Foundation, 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
- *
  */
 
-/** \file autopilot.h
- *  \brief Autopilot modes
+/**
+ * @file firmwares/fixedwing/autopilot.h
+ *
+ * Fixedwing autopilot modes.
  *
  */
 
@@ -32,15 +31,22 @@
 
 #include <inttypes.h>
 #include "std.h"
-#include "mcu_periph/sys_time.h"
-#include "estimator.h"
+#include "paparazzi.h"
+#include "generated/airframe.h"
 
+
+/** Autopilot inititalization.
+ */
+extern void autopilot_init(void);
+
+/** Threshold for RC mode detection.
+ */
 #define THRESHOLD_MANUAL_PPRZ (MIN_PPRZ / 2)
-
 #define THRESHOLD1 THRESHOLD_MANUAL_PPRZ
 #define THRESHOLD2 (MAX_PPRZ/2)
 
-
+/** AP modes.
+ */
 #define  PPRZ_MODE_MANUAL 0
 #define  PPRZ_MODE_AUTO1 1
 #define  PPRZ_MODE_AUTO2 2
@@ -54,6 +60,14 @@
 
 extern uint8_t pprz_mode;
 extern bool_t kill_throttle;
+extern uint8_t  mcu1_status;
+
+/** flight time in seconds. */
+extern uint16_t autopilot_flight_time;
+
+#define autopilot_ResetFlightTimeAndLaunch(_) { \
+  autopilot_flight_time = 0; launch = FALSE; \
+}
 
 
 // FIXME, move to control
@@ -69,7 +83,19 @@ extern uint8_t lateral_mode;
 
 #define THROTTLE_THRESHOLD_TAKEOFF (pprz_t)(MAX_PPRZ * 0.9)
 
-extern uint8_t vsupply;
+/** Supply voltage in deciVolt.
+ * This the ap copy of the measurement from fbw
+ */
+extern uint16_t vsupply;
+
+/** Supply current in milliAmpere.
+ * This the ap copy of the measurement from fbw
+ */
+extern int32_t current;	// milliAmpere
+
+/** Fuel consumption (mAh)
+ * TODO: move to electrical subsystem
+ */
 extern float energy;
 
 extern bool_t launch;
@@ -83,6 +109,12 @@ extern bool_t gps_lost;
   (_mode != new_mode ? _mode = new_mode, TRUE : FALSE); \
 })
 
+/** Send mode over telemetry
+ */
+extern void autopilot_send_mode(void);
+
+/** Power switch control.
+ */
 extern bool_t power_switch;
 
 #ifdef POWER_SWITCH_LED
@@ -94,9 +126,6 @@ extern bool_t power_switch;
 #define autopilot_SetPowerSwitch(_x) { power_switch = _x; }
 #endif // POWER_SWITCH_LED
 
-#define autopilot_ResetFlightTimeAndLaunch(_) { \
-  estimator_flight_time = 0; launch = FALSE; \
-}
 
 /* CONTROL_RATE will be removed in the next release
  * please use CONTROL_FREQUENCY instead
@@ -104,7 +133,7 @@ extern bool_t power_switch;
 #ifndef CONTROL_FREQUENCY
 #ifdef  CONTROL_RATE
 #define CONTROL_FREQUENCY CONTROL_RATE
-#pragma message "CONTROL_RATE is deprecated. Please use CONTROL_FREQUENCY instead. Defaults to 60Hz if not defined."
+#warning "CONTROL_RATE is deprecated. Please use CONTROL_FREQUENCY instead. Defaults to 60Hz if not defined."
 #else
 #define CONTROL_FREQUENCY 60
 #endif  // CONTROL_RATE
@@ -112,10 +141,6 @@ extern bool_t power_switch;
 
 #ifndef NAVIGATION_FREQUENCY
 #define NAVIGATION_FREQUENCY 4
-#endif
-
-#ifndef MODULES_FREQUENCY
-#define MODULES_FREQUENCY 60
 #endif
 
 #endif /* AUTOPILOT_H */

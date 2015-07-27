@@ -1,13 +1,7 @@
 # Hey Emacs, this is a -*- makefile -*-
 
 #generic spi driver
-$(TARGET).CFLAGS += -DUSE_SPI
-
-
-ifeq ($(ARCH), lpc21)
-$(TARGET).CFLAGS += -DSSP_VIC_SLOT=9
-else ifeq ($(ARCH), stm32)
-endif
+$(TARGET).CFLAGS += -DUSE_SPI -DSPI_SLAVE_HS
 
 ifeq ($(TARGET), sim)
 else

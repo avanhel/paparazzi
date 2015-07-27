@@ -1,6 +1,4 @@
 /*
- * $Id: humid_hih.c $
- *
  * Copyright (C) 2010 Martin Mueller
  *
  * This file is part of paparazzi.
@@ -38,9 +36,6 @@
 #include "messages.h"
 #include "subsystems/datalink/downlink.h"
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #ifndef ADC_CHANNEL_HUMID_HIH
 #define ADC_CHANNEL_HUMID_HIH ADC_3

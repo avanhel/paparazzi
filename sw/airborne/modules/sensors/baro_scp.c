@@ -2,6 +2,7 @@
 #include "mcu_periph/sys_time.h"
 #include "led.h"
 #include "mcu.h"
+#include "subsystems/abi.h"
 
 #include "mcu_periph/uart.h"
 #include "messages.h"
@@ -15,9 +16,6 @@
 #warning set SENSOR_SYNC_SEND to use baro_scp
 #endif
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #define STA_UNINIT       0
 #define STA_INITIALISING 1
@@ -34,7 +32,7 @@ static void EXTINT_ISR(void) __attribute__((naked));
 static void SPI1_ISR(void) __attribute__((naked));
 
 void baro_scp_periodic(void) {
-  if (baro_scp_status == STA_UNINIT && cpu_time_sec > 1) {
+  if (baro_scp_status == STA_UNINIT && sys_time.nb_sec > 1) {
     baro_scp_start_high_res_measurement();
     baro_scp_status = STA_INITIALISING;
   }
@@ -64,6 +62,12 @@ void baro_scp_periodic(void) {
 #define ScpSelect()   SetBit(SS_IOCLR,SS_PIN)
 #define ScpUnselect() SetBit(SS_IOSET,SS_PIN)
 
+#warning "This driver should be updated to use the new SPI peripheral"
+
+#ifndef SPI1_VIC_SLOT
+#define SPI1_VIC_SLOT 7
+#endif
+
 void baro_scp_init( void ) {
   /* setup pins for SSP (SCK, MISO, MOSI) */
   PINSEL1 |= 2 << 2 | 2 << 4 | 2 << 6;
@@ -77,8 +81,8 @@ void baro_scp_init( void ) {
   /* initialize interrupt vector */
   VICIntSelect &= ~VIC_BIT(VIC_SPI1);   // SPI1 selected as IRQ
   VICIntEnable = VIC_BIT(VIC_SPI1);     // SPI1 interrupt enabled
-  VICVectCntl7 = VIC_ENABLE | VIC_SPI1;
-  VICVectAddr7 = (uint32_t)SPI1_ISR;    // address of the ISR
+  _VIC_CNTL(SPI1_VIC_SLOT) = VIC_ENABLE | VIC_SPI1;
+  _VIC_CNTL(SPI1_VIC_SLOT) = (uint32_t)SPI1_ISR;    /* address of the ISR */
 
   /* configure SS pin */
   SetBit(SS_IODIR, SS_PIN); /* pin is output  */
@@ -178,6 +182,8 @@ static void baro_scp_read(void) {
 
 void baro_scp_event( void ) {
   if (baro_scp_available == TRUE) {
+    float pressure = (float)baro_scp_pressure;
+    AbiSendMsgBARO_ABS(BARO_SCP_SENDER_ID, &pressure);
 #ifdef SENSOR_SYNC_SEND
     DOWNLINK_SEND_SCP_STATUS(DefaultChannel, DefaultDevice, &baro_scp_pressure, &baro_scp_temperature);
 #endif

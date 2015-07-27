@@ -1,6 +1,4 @@
 /*
- * $Id: light_solar.c $
- *
  * Copyright (C) 2011 Martin Mueller
  *
  * This file is part of paparazzi.
@@ -46,9 +44,6 @@
 #define ADC_CHANNEL_LIGHT_NB_SAMPLES 16
 #endif
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 uint16_t up[LIGHT_NB], dn[LIGHT_NB];
 int32_t  light_cnt;

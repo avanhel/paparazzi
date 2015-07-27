@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2009 Antoine Drouin <poinix@gmail.com>
  *
  * This file is part of paparazzi.
@@ -100,7 +98,7 @@ int main(void) {
   return 0;
 }
 
-/* 
+/*
  * XXX: do we really need volatile here?
  *
  * Also we should probably use systime instead as it is being linked into this

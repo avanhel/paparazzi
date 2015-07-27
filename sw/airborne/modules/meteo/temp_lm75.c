@@ -1,6 +1,4 @@
 /*
- * $Id: temp_lm75.c $
- *
  * Copyright (C) 2010 Martin Mueller
  *
  * This file is part of paparazzi.
@@ -37,9 +35,6 @@
 #include "messages.h"
 #include "subsystems/datalink/downlink.h"
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 uint8_t  lm75_meas_started;
 struct i2c_transaction lm75_trans;
@@ -60,7 +55,7 @@ void lm75_init(void) {
 
 void lm75_periodic( void ) {
   lm75_trans.buf[0] = LM75_TEMP_REG;
-  I2CTransceive(LM75_I2C_DEV, lm75_trans, LM75_SLAVE_ADDR, 1, 2);
+  i2c_transceive(&LM75_I2C_DEV, &lm75_trans, LM75_SLAVE_ADDR, 1, 2);
 }
 
 void lm75_event( void ) {

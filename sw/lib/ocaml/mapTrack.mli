@@ -1,6 +1,4 @@
 (*
- * $Id$
- *
  * Track objects
  *
  * Copyright (C) 2004-2010 CENA/ENAC, Pascal Brisset, Antoine Drouin
@@ -26,6 +24,7 @@
 
 class track :
   ?name:string ->
+  ?icon:string ->
   ?size:int ->
   ?color:string ->
   MapCanvas.widget ->

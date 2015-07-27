@@ -1,6 +1,4 @@
 /*
- * $Id: stabilization_attitude_euler.c 3795 2009-07-24 23:43:02Z poine $
- *
  * Copyright (C) 2008-2009 Antoine Drouin <poinix@gmail.com>
  *
  * This file is part of paparazzi.
@@ -22,80 +20,139 @@
  */
 
 #include "firmwares/rotorcraft/stabilization.h"
+#include "firmwares/rotorcraft/stabilization/stabilization_attitude_rc_setpoint.h"
 
 #include "math/pprz_algebra_float.h"
-#include "subsystems/ahrs.h"
+#include "state.h"
 #include "subsystems/radio_control.h"
 
 #include "generated/airframe.h"
 
 
 struct FloatAttitudeGains stabilization_gains;
-
-/* warn if some gains are still negative */
-#if (STABILIZATION_ATTITUDE_FLOAT_PHI_PGAIN < 0) ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_THETA_PGAIN < 0) ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_PSI_PGAIN < 0)   ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_PHI_DGAIN < 0)   ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_THETA_DGAIN < 0) ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_PSI_DGAIN < 0)   ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_PHI_IGAIN < 0)   ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_THETA_IGAIN < 0) ||   \
-  (STABILIZATION_ATTITUDE_FLOAT_PSI_IGAIN  < 0)
-#warning "ALL control gains are now positive!!!"
-#endif
-
 struct FloatEulers stabilization_att_sum_err;
 
 float stabilization_att_fb_cmd[COMMANDS_NB];
 float stabilization_att_ff_cmd[COMMANDS_NB];
 
+#if DOWNLINK
+#include "subsystems/datalink/telemetry.h"
+
+static void send_att(void) {
+  struct FloatRates* body_rate = stateGetBodyRates_f();
+  struct FloatEulers* att = stateGetNedToBodyEulers_f();
+  float foo = 0.0;
+  DOWNLINK_SEND_STAB_ATTITUDE_FLOAT(DefaultChannel, DefaultDevice,
+      &(body_rate->p), &(body_rate->q), &(body_rate->r),
+      &(att->phi), &(att->theta), &(att->psi),
+      &stab_att_sp_euler.phi,
+      &stab_att_sp_euler.theta,
+      &stab_att_sp_euler.psi,
+      &stabilization_att_sum_err.phi,
+      &stabilization_att_sum_err.theta,
+      &stabilization_att_sum_err.psi,
+      &stabilization_att_fb_cmd[COMMAND_ROLL],
+      &stabilization_att_fb_cmd[COMMAND_PITCH],
+      &stabilization_att_fb_cmd[COMMAND_YAW],
+      &stabilization_att_ff_cmd[COMMAND_ROLL],
+      &stabilization_att_ff_cmd[COMMAND_PITCH],
+      &stabilization_att_ff_cmd[COMMAND_YAW],
+      &stabilization_cmd[COMMAND_ROLL],
+      &stabilization_cmd[COMMAND_PITCH],
+      &stabilization_cmd[COMMAND_YAW],
+      &foo, &foo, &foo);
+}
+
+static void send_att_ref(void) {
+  DOWNLINK_SEND_STAB_ATTITUDE_REF_FLOAT(DefaultChannel, DefaultDevice,
+      &stab_att_sp_euler.phi,
+      &stab_att_sp_euler.theta,
+      &stab_att_sp_euler.psi,
+      &stab_att_ref_euler.phi,
+      &stab_att_ref_euler.theta,
+      &stab_att_ref_euler.psi,
+      &stab_att_ref_rate.p,
+      &stab_att_ref_rate.q,
+      &stab_att_ref_rate.r,
+      &stab_att_ref_accel.p,
+      &stab_att_ref_accel.q,
+      &stab_att_ref_accel.r);
+}
+#endif
 
 void stabilization_attitude_init(void) {
 
   stabilization_attitude_ref_init();
 
   VECT3_ASSIGN(stabilization_gains.p,
-               STABILIZATION_ATTITUDE_FLOAT_PHI_PGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_THETA_PGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_PSI_PGAIN);
+               STABILIZATION_ATTITUDE_PHI_PGAIN,
+               STABILIZATION_ATTITUDE_THETA_PGAIN,
+               STABILIZATION_ATTITUDE_PSI_PGAIN);
 
   VECT3_ASSIGN(stabilization_gains.d,
-               STABILIZATION_ATTITUDE_FLOAT_PHI_DGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_THETA_DGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_PSI_DGAIN);
+               STABILIZATION_ATTITUDE_PHI_DGAIN,
+               STABILIZATION_ATTITUDE_THETA_DGAIN,
+               STABILIZATION_ATTITUDE_PSI_DGAIN);
 
   VECT3_ASSIGN(stabilization_gains.i,
-               STABILIZATION_ATTITUDE_FLOAT_PHI_IGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_THETA_IGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_PSI_IGAIN);
+               STABILIZATION_ATTITUDE_PHI_IGAIN,
+               STABILIZATION_ATTITUDE_THETA_IGAIN,
+               STABILIZATION_ATTITUDE_PSI_IGAIN);
 
   VECT3_ASSIGN(stabilization_gains.dd,
-               STABILIZATION_ATTITUDE_FLOAT_PHI_DDGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_THETA_DDGAIN,
-               STABILIZATION_ATTITUDE_FLOAT_PSI_DDGAIN);
+               STABILIZATION_ATTITUDE_PHI_DDGAIN,
+               STABILIZATION_ATTITUDE_THETA_DDGAIN,
+               STABILIZATION_ATTITUDE_PSI_DDGAIN);
 
   FLOAT_EULERS_ZERO( stabilization_att_sum_err );
 
+#if DOWNLINK
+  register_periodic_telemetry(DefaultPeriodic, "STAB_ATTITUDE", send_att);
+  register_periodic_telemetry(DefaultPeriodic, "STAB_ATTITUDE_REF", send_att_ref);
+#endif
 }
 
 
 void stabilization_attitude_read_rc(bool_t in_flight) {
-
-  STABILIZATION_ATTITUDE_FLOAT_READ_RC(stab_att_sp_euler, in_flight);
-
+  stabilization_attitude_read_rc_setpoint_eulers_f(&stab_att_sp_euler, in_flight);
 }
 
 
 void stabilization_attitude_enter(void) {
 
-  STABILIZATION_ATTITUDE_FLOAT_RESET_PSI_REF(  stab_att_sp_euler );
-  FLOAT_EULERS_ZERO( stabilization_att_sum_err );
+  /* reset psi setpoint to current psi angle */
+  stab_att_sp_euler.psi = stabilization_attitude_get_heading_f();
 
+  stabilization_attitude_ref_enter();
+
+  FLOAT_EULERS_ZERO(stabilization_att_sum_err);
 }
 
+void stabilization_attitude_set_failsafe_setpoint(void) {
+  stab_att_sp_euler.phi = 0.0;
+  stab_att_sp_euler.theta = 0.0;
+  stab_att_sp_euler.psi = stateGetNedToBodyEulers_f()->psi;
+}
 
-#define MAX_SUM_ERR RadOfDeg(56000)
+void stabilization_attitude_set_rpy_setpoint_i(struct Int32Eulers *rpy) {
+  EULERS_FLOAT_OF_BFP(stab_att_sp_euler, *rpy);
+}
+
+void stabilization_attitude_set_earth_cmd_i(struct Int32Vect2 *cmd, int32_t heading) {
+  struct FloatVect2 cmd_f;
+  cmd_f.x = ANGLE_FLOAT_OF_BFP(cmd->x);
+  cmd_f.y = ANGLE_FLOAT_OF_BFP(cmd->y);
+
+  /* Rotate horizontal commands to body frame by psi */
+  float psi = stateGetNedToBodyEulers_f()->psi;
+  float s_psi = sinf(psi);
+  float c_psi = cosf(psi);
+  stab_att_sp_euler.phi = -s_psi * cmd_f.x + c_psi * cmd_f.y;
+  stab_att_sp_euler.theta = -c_psi * cmd_f.x - s_psi * cmd_f.y;
+  stab_att_sp_euler.psi = ANGLE_FLOAT_OF_BFP(heading);
+}
+
+#define MAX_SUM_ERR 200
 
 void stabilization_attitude_run(bool_t  in_flight) {
 
@@ -103,18 +160,17 @@ void stabilization_attitude_run(bool_t  in_flight) {
 
   /* Compute feedforward */
   stabilization_att_ff_cmd[COMMAND_ROLL] =
-    stabilization_gains.dd.x * stab_att_ref_accel.p / 32.;
+    stabilization_gains.dd.x * stab_att_ref_accel.p;
   stabilization_att_ff_cmd[COMMAND_PITCH] =
-    stabilization_gains.dd.y * stab_att_ref_accel.q / 32.;
+    stabilization_gains.dd.y * stab_att_ref_accel.q;
   stabilization_att_ff_cmd[COMMAND_YAW] =
-    stabilization_gains.dd.z * stab_att_ref_accel.r / 32.;
+    stabilization_gains.dd.z * stab_att_ref_accel.r;
 
   /* Compute feedback                  */
   /* attitude error            */
-  struct FloatEulers att_float;
-  EULERS_FLOAT_OF_BFP(att_float, ahrs.ltp_to_body_euler);
+  struct FloatEulers *att_float = stateGetNedToBodyEulers_f();
   struct FloatEulers att_err;
-  EULERS_DIFF(att_err, stab_att_ref_euler, att_float);
+  EULERS_DIFF(att_err, stab_att_ref_euler, *att_float);
   FLOAT_ANGLE_NORMALIZE(att_err.psi);
 
   if (in_flight) {
@@ -127,34 +183,37 @@ void stabilization_attitude_run(bool_t  in_flight) {
   }
 
   /*  rate error                */
-  struct FloatRates rate_float;
-  RATES_FLOAT_OF_BFP(rate_float, ahrs.body_rate);
+  struct FloatRates* rate_float = stateGetBodyRates_f();
   struct FloatRates rate_err;
-  RATES_DIFF(rate_err, stab_att_ref_rate, rate_float);
+  RATES_DIFF(rate_err, stab_att_ref_rate, *rate_float);
 
   /*  PID                  */
 
   stabilization_att_fb_cmd[COMMAND_ROLL] =
     stabilization_gains.p.x  * att_err.phi +
     stabilization_gains.d.x  * rate_err.p +
-    stabilization_gains.i.x  * stabilization_att_sum_err.phi / 1024.;
+    stabilization_gains.i.x  * stabilization_att_sum_err.phi;
 
   stabilization_att_fb_cmd[COMMAND_PITCH] =
     stabilization_gains.p.y  * att_err.theta +
     stabilization_gains.d.y  * rate_err.q +
-    stabilization_gains.i.y  * stabilization_att_sum_err.theta / 1024.;
+    stabilization_gains.i.y  * stabilization_att_sum_err.theta;
 
   stabilization_att_fb_cmd[COMMAND_YAW] =
     stabilization_gains.p.z  * att_err.psi +
     stabilization_gains.d.z  * rate_err.r +
-    stabilization_gains.i.z  * stabilization_att_sum_err.psi / 1024.;
+    stabilization_gains.i.z  * stabilization_att_sum_err.psi;
 
 
   stabilization_cmd[COMMAND_ROLL] =
-    (stabilization_att_fb_cmd[COMMAND_ROLL]+stabilization_att_ff_cmd[COMMAND_ROLL])/16.;
+    (stabilization_att_fb_cmd[COMMAND_ROLL]+stabilization_att_ff_cmd[COMMAND_ROLL]);
   stabilization_cmd[COMMAND_PITCH] =
-    (stabilization_att_fb_cmd[COMMAND_PITCH]+stabilization_att_ff_cmd[COMMAND_PITCH])/16.;
+    (stabilization_att_fb_cmd[COMMAND_PITCH]+stabilization_att_ff_cmd[COMMAND_PITCH]);
   stabilization_cmd[COMMAND_YAW] =
-    (stabilization_att_fb_cmd[COMMAND_YAW]+stabilization_att_ff_cmd[COMMAND_YAW])/16.;
+    (stabilization_att_fb_cmd[COMMAND_YAW]+stabilization_att_ff_cmd[COMMAND_YAW]);
 
+  /* bound the result */
+  BoundAbs(stabilization_cmd[COMMAND_ROLL], MAX_PPRZ);
+  BoundAbs(stabilization_cmd[COMMAND_PITCH], MAX_PPRZ);
+  BoundAbs(stabilization_cmd[COMMAND_YAW], MAX_PPRZ);
 }

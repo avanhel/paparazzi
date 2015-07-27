@@ -19,7 +19,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/** @file gps_ucenter_onboard.h
+/**
+ * @file modules/gps/gps_ubx_ucenter.h
  * @brief Configure Ublox GPS
  *
  */
@@ -27,8 +28,10 @@
 #ifndef GPS_UBX_UCENTER_H
 #define GPS_UBX_UCENTER_H
 
+#include "std.h"
+
 /** U-Center Variables */
-#define GPS_UBX_UCENTER_CONFIG_STEPS	  17
+#define GPS_UBX_UCENTER_CONFIG_STEPS	  18
 
 struct gps_ubx_ucenter_struct
 {
@@ -36,8 +39,8 @@ struct gps_ubx_ucenter_struct
   uint8_t reply;
   uint8_t cnt;
 
-  uint16_t baud_init;
-  uint16_t baud_run;
+  uint32_t baud_init;
+  uint32_t baud_run;
 
   uint8_t sw_ver_h;
   uint8_t sw_ver_l;

@@ -1,5 +1,5 @@
  /*
- * Copyright (C) 2010 ENAC
+ * Copyright (C) 2010-2013 Gautier Hattenberger
  *
  * This file is part of paparazzi.
  *
@@ -25,48 +25,59 @@
  * Navarro & Gorraz & Hattenberger
  */
 
+#include "std.h"
+#include "baro_board.h"
 #include "subsystems/sensors/baro.h"
+#include "peripherals/ads1114.h"
+#include "subsystems/abi.h"
+#include "led.h"
 
-
-/* Common Baro struct */
-struct Baro baro;
-
-#if USE_BARO_AS_ALTIMETER
-/* Number of values to compute an offset at startup */
-#define OFFSET_NBSAMPLES_AVRG 100
-
-/* Weight for offset IIR filter */
-#define OFFSET_FILTER 7
-
-float baro_alt;
-float baro_alt_offset;
-uint16_t offset_cnt;
+// ADC for absolute pressure
+#ifndef BARO_ABS_ADS
+#define BARO_ABS_ADS ads1114_1
 #endif
+
+// FIXME
+#ifndef UMARIM_BARO_SENS
+#define UMARIM_BARO_SENS 0.0274181
+#endif
+
+/* Counter to init ads1114 at startup */
+#define BARO_STARTUP_COUNTER 200
+uint16_t startup_cnt;
 
 void baro_init( void ) {
   ads1114_init();
-  baro.status = BS_UNINITIALIZED;
-  baro.absolute     = 0;
-  baro.differential = 0; /* not handled on this board, use extra module (ex: airspeed_ads1114) */
-#if USE_BARO_AS_ALTIMETER
-  baro_alt = 0.;
-  baro_alt_offset = 0.;
-  offset_cnt = OFFSET_NBSAMPLES_AVRG;
+#ifdef BARO_LED
+  LED_OFF(BARO_LED);
 #endif
+  startup_cnt = BARO_STARTUP_COUNTER;
 }
 
 void baro_periodic( void ) {
 
-#if USE_BARO_AS_ALTIMETER
-  if (baro.status == BS_UNINITIALIZED && BARO_ABS_ADS.data_available) {
-    // IIR filter to compute an initial offset
-    baro_alt_offset = (OFFSET_FILTER * baro_alt_offset + (float)baro.absolute) / (OFFSET_FILTER + 1);
-    // decrease init counter
-    --offset_cnt;
-    if (offset_cnt == 0) baro.status = BS_RUNNING;
-  }
+  // Run some loops to get correct readings from the adc
+  if (startup_cnt > 0) {
+    --startup_cnt;
+#ifdef BARO_LED
+    LED_TOGGLE(BARO_LED);
+    if (startup_cnt == 0) {
+      LED_ON(BARO_LED);
+    }
 #endif
+  }
   // Read the ADC
   ads1114_read(&BARO_ABS_ADS);
+}
+
+void umarim_baro_event(void) {
+  Ads1114Event();
+  if (BARO_ABS_ADS.data_available) {
+    if (startup_cnt == 0) {
+      float pressure = UMARIM_BARO_SENS*Ads1114GetValue(BARO_ABS_ADS);
+      AbiSendMsgBARO_ABS(BARO_BOARD_SENDER_ID, &pressure);
+    }
+    BARO_ABS_ADS.data_available = FALSE;
+  }
 }
 

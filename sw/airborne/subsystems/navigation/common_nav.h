@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2007-2009  ENAC, Pascal Brisset, Antoine Drouin
  *
  * This file is part of paparazzi.
@@ -19,6 +17,10 @@
  * along with paparazzi; see the file COPYING.  If not, write to
  * the Free Software Foundation, 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
+ */
+
+/**
+ * @file subsystems/navigation/common_nav.h
  *
  */
 
@@ -26,6 +28,7 @@
 #define COMMON_NAV_H
 
 #include "std.h"
+#include "state.h"
 #include "subsystems/navigation/common_flight_plan.h"
 
 extern float max_dist_from_home;
@@ -58,6 +61,7 @@ extern uint8_t nav_utm_zone0;
 
 
 void compute_dist2_to_home(void);
+unit_t nav_reset_utm_zone(void);
 unit_t nav_reset_reference( void ) __attribute__ ((unused));
 unit_t nav_update_waypoints_alt( void ) __attribute__ ((unused));
 void common_nav_periodic_task_4Hz(void);
@@ -66,8 +70,8 @@ void common_nav_periodic_task_4Hz(void);
 #define NavSetGroundReferenceHere() ({ nav_reset_reference(); nav_update_waypoints_alt(); FALSE; })
 
 #define NavSetWaypointHere(_wp) ({ \
-  waypoints[_wp].x = estimator_x; \
-  waypoints[_wp].y = estimator_y; \
+  waypoints[_wp].x = stateGetPositionEnu_f()->x; \
+  waypoints[_wp].y = stateGetPositionEnu_f()->y; \
   FALSE; \
 })
 

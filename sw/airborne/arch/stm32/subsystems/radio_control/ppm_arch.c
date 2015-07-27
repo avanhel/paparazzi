@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2010 The Paparazzi Team
  *
  * This file is part of paparazzi.
@@ -21,69 +19,195 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file arch/stm32/subsystems/radio_control/ppm_arch.c
+ * @ingroup stm32_arch
+ *
+ * STM32 ppm decoder.
+ *
+ * Input signal either on:
+ *  - PA1 TIM2/CH2 (uart1 trig on Lisa/L)  (Servo 6 on Lisa/M)
+ *  - PA10 TIM1/CH3 (uart1 trig on Lisa/L) (uart1 rx on Lisa/M)
+ *
+ */
+
 #include "subsystems/radio_control.h"
 #include "subsystems/radio_control/ppm.h"
 
-#include <libopencm3/stm32/f1/rcc.h>
-#include <libopencm3/stm32/f1/gpio.h>
+#include BOARD_CONFIG
+
+#include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/timer.h>
-#include <libopencm3/stm32/nvic.h>
+#include <libopencm3/cm3/nvic.h>
 
 #include "mcu_periph/sys_time.h"
+#include "mcu_periph/gpio.h"
 
-/*
- *
- * This a radio control ppm driver for stm32
- * signal on PA1 TIM2/CH2 (uart1 trig on lisa/L)
- *
- */
+
+#define ONE_MHZ_CLK 1000000
+
 uint8_t  ppm_cur_pulse;
 uint32_t ppm_last_pulse_time;
 bool_t   ppm_data_valid;
 static uint32_t timer_rollover_cnt;
 
-void tim2_isr(void);
+/*
+ * Timer clock frequency (before prescaling) is twice the frequency
+ * of the APB domain to which the timer is connected.
+ */
+
+#ifdef STM32F1
+/**
+ * HCLK = 72MHz, Timer clock also 72MHz since
+ * TIM1_CLK = APB2 = 72MHz
+ * TIM2_CLK = 2 * APB1 = 2 * 32MHz
+ */
+#define PPM_TIMER_CLK       AHB_CLK
+#endif
+
+#if USE_PPM_TIM2
+
+PRINT_CONFIG_MSG("Using TIM2 for PPM input.")
+
+#define PPM_RCC             &RCC_APB1ENR
+#define PPM_PERIPHERAL      RCC_APB1ENR_TIM2EN
+#define PPM_TIMER           TIM2
+
+#ifdef STM32F4
+/* Since APB prescaler != 1 :
+ * Timer clock frequency (before prescaling) is twice the frequency
+ * of the APB domain to which the timer is connected.
+ */
+#define PPM_TIMER_CLK       (rcc_ppre1_frequency * 2)
+#endif
+
+#elif USE_PPM_TIM3
+
+PRINT_CONFIG_MSG("Using TIM3 for PPM input.")
+
+#define PPM_RCC             &RCC_APB1ENR
+#define PPM_PERIPHERAL      RCC_APB1ENR_TIM3EN
+#define PPM_TIMER           TIM3
+
+#ifdef STM32F4
+/* Since APB prescaler != 1 :
+ * Timer clock frequency (before prescaling) is twice the frequency
+ * of the APB domain to which the timer is connected.
+ */
+#define PPM_TIMER_CLK       (rcc_ppre1_frequency * 2)
+#endif
+
+#elif USE_PPM_TIM4
+
+PRINT_CONFIG_MSG("Using TIM4 for PPM input.")
+
+#define PPM_RCC             &RCC_APB1ENR
+#define PPM_PERIPHERAL      RCC_APB1ENR_TIM4EN
+#define PPM_TIMER           TIM4
+
+#ifdef STM32F4
+/* Since APB prescaler != 1 :
+ * Timer clock frequency (before prescaling) is twice the frequency
+ * of the APB domain to which the timer is connected.
+ */
+#define PPM_TIMER_CLK       (rcc_ppre1_frequency * 2)
+#endif
+
+#elif USE_PPM_TIM5
+
+PRINT_CONFIG_MSG("Using TIM5 for PPM input.")
+
+#define PPM_RCC             &RCC_APB1ENR
+#define PPM_PERIPHERAL      RCC_APB1ENR_TIM5EN
+#define PPM_TIMER           TIM5
+
+#ifdef STM32F4
+/* Since APB prescaler != 1 :
+ * Timer clock frequency (before prescaling) is twice the frequency
+ * of the APB domain to which the timer is connected.
+ */
+#define PPM_TIMER_CLK       (rcc_ppre1_frequency * 2)
+#endif
+
+#elif USE_PPM_TIM1
+
+PRINT_CONFIG_MSG("Using TIM1 for PPM input.")
+
+#define PPM_RCC             &RCC_APB2ENR
+#define PPM_PERIPHERAL      RCC_APB2ENR_TIM1EN
+#define PPM_TIMER           TIM1
+
+#ifdef STM32F4
+#define PPM_TIMER_CLK       (rcc_ppre2_frequency * 2)
+#endif
+
+#elif USE_PPM_TIM8
+
+PRINT_CONFIG_MSG("Using TIM8 for PPM input.")
+
+#define PPM_RCC             &RCC_APB2ENR
+#define PPM_PERIPHERAL      RCC_APB2ENR_TIM8EN
+#define PPM_TIMER           TIM8
+
+#ifdef STM32F4
+#define PPM_TIMER_CLK       (rcc_ppre2_frequency * 2)
+#endif
+
+
+#else
+#error Unknown PPM input timer configuration.
+#endif
 
 void ppm_arch_init ( void ) {
 
-  /* TIM2 clock enable */
-  rcc_peripheral_enable_clock(&RCC_APB1ENR, RCC_APB1ENR_TIM2EN);
+  /* timer clock enable */
+  rcc_peripheral_enable_clock(PPM_RCC, PPM_PERIPHERAL);
 
-  /* GPIOA clock enable */
-  rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPAEN);
+  /* GPIO clock enable */
+  gpio_enable_clock(PPM_GPIO_PORT);
 
-  /* TIM2 channel 2 pin (PA.01) configuration */
-  gpio_set_mode(GPIOA, GPIO_MODE_INPUT,
-		GPIO_CNF_INPUT_FLOAT, GPIO1);
+  /* timer gpio configuration */
+  gpio_setup_pin_af(PPM_GPIO_PORT, PPM_GPIO_PIN, PPM_GPIO_AF, FALSE);
 
   /* Time Base configuration */
-  timer_reset(TIM2);
-  timer_set_mode(TIM2, TIM_CR1_CKD_CK_INT,
-		 TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
-  timer_set_period(TIM2, 0xFFFF);
-  timer_set_prescaler(TIM2, 0x8);
+  timer_reset(PPM_TIMER);
+  timer_set_mode(PPM_TIMER, TIM_CR1_CKD_CK_INT,
+                 TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
+  timer_set_period(PPM_TIMER, 0xFFFF);
+  timer_set_prescaler(PPM_TIMER, (PPM_TIMER_CLK / (RC_PPM_TICKS_PER_USEC*ONE_MHZ_CLK)) - 1);
 
- /* TIM2 configuration: Input Capture mode ---------------------
-     The external signal is connected to TIM2 CH2 pin (PA.01)
-     The Rising edge is used as active edge,
+ /* TIM configuration: Input Capture mode ---------------------
+     The Rising edge is used as active edge
   ------------------------------------------------------------ */
-  timer_ic_set_polarity(TIM2, TIM_IC2, TIM_IC_RISING);
-  timer_ic_set_input(TIM2, TIM_IC2, TIM_IC_IN_TI2);
-  timer_ic_set_prescaler(TIM2, TIM_IC2, TIM_IC_PSC_OFF);
-  timer_ic_set_filter(TIM2, TIM_IC2, TIM_IC_OFF);
+#if defined PPM_PULSE_TYPE && PPM_PULSE_TYPE == PPM_PULSE_TYPE_POSITIVE
+  timer_ic_set_polarity(PPM_TIMER, PPM_CHANNEL, TIM_IC_RISING);
+#elif defined PPM_PULSE_TYPE && PPM_PULSE_TYPE == PPM_PULSE_TYPE_NEGATIVE
+  timer_ic_set_polarity(PPM_TIMER, PPM_CHANNEL, TIM_IC_FALLING);
+#else
+#error "Unknown PPM_PULSE_TYPE"
+#endif
+  timer_ic_set_input(PPM_TIMER, PPM_CHANNEL, PPM_TIMER_INPUT);
+  timer_ic_set_prescaler(PPM_TIMER, PPM_CHANNEL, TIM_IC_PSC_OFF);
+  timer_ic_set_filter(PPM_TIMER, PPM_CHANNEL, TIM_IC_OFF);
 
-  /* Enable the TIM2 global Interrupt. */
-  nvic_set_priority(NVIC_TIM2_IRQ, 2);
-  nvic_enable_irq(NVIC_TIM2_IRQ);
+  /* Enable timer Interrupt(s). */
+  nvic_set_priority(PPM_IRQ, 2);
+  nvic_enable_irq(PPM_IRQ);
 
-  /* Enable the CC2 and Update interrupt requests. */
-  timer_enable_irq(TIM2, TIM_DIER_CC2IE | TIM_DIER_UIE);
+#ifdef PPM_IRQ2
+  nvic_set_priority(PPM_IRQ2, 2);
+  nvic_enable_irq(PPM_IRQ2);
+#endif
+
+  /* Enable the Capture/Compare and Update interrupt requests. */
+  timer_enable_irq(PPM_TIMER, (PPM_CC_IE | TIM_DIER_UIE));
 
   /* Enable capture channel. */
-  timer_ic_enable(TIM2, TIM_IC2);
+  timer_ic_enable(PPM_TIMER, PPM_CHANNEL);
 
-  /* TIM2 enable counter */
-  timer_enable_counter(TIM2);
+  /* TIM enable counter */
+  timer_enable_counter(PPM_TIMER);
 
   ppm_last_pulse_time = 0;
   ppm_cur_pulse = RADIO_CONTROL_NB_CHANNEL;
@@ -91,11 +215,12 @@ void ppm_arch_init ( void ) {
 
 }
 
+#if USE_PPM_TIM2
 
 void tim2_isr(void) {
 
-  if((TIM2_SR & TIM_SR_CC2IF) != 0) {
-    timer_clear_flag(TIM2, TIM_SR_CC2IF);
+  if((TIM2_SR & PPM_CC_IF) != 0) {
+    timer_clear_flag(TIM2, PPM_CC_IF);
 
     uint32_t now = timer_get_counter(TIM2) + timer_rollover_cnt;
     DecodePpmFrame(now);
@@ -106,3 +231,103 @@ void tim2_isr(void) {
   }
 
 }
+
+
+#elif USE_PPM_TIM3
+
+void tim3_isr(void) {
+
+  if((TIM3_SR & PPM_CC_IF) != 0) {
+    timer_clear_flag(TIM3, PPM_CC_IF);
+
+    uint32_t now = timer_get_counter(TIM3) + timer_rollover_cnt;
+    DecodePpmFrame(now);
+  }
+  else if((TIM3_SR & TIM_SR_UIF) != 0) {
+    timer_rollover_cnt+=(1<<16);
+    timer_clear_flag(TIM3, TIM_SR_UIF);
+  }
+
+}
+
+#elif USE_PPM_TIM4
+
+void tim4_isr(void) {
+
+  if((TIM4_SR & PPM_CC_IF) != 0) {
+    timer_clear_flag(TIM4, PPM_CC_IF);
+
+    uint32_t now = timer_get_counter(TIM4) + timer_rollover_cnt;
+    DecodePpmFrame(now);
+  }
+  else if((TIM4_SR & TIM_SR_UIF) != 0) {
+    timer_rollover_cnt+=(1<<16);
+    timer_clear_flag(TIM4, TIM_SR_UIF);
+  }
+
+}
+
+#elif USE_PPM_TIM5
+
+void tim5_isr(void) {
+
+  if((TIM5_SR & PPM_CC_IF) != 0) {
+    timer_clear_flag(TIM5, PPM_CC_IF);
+
+    uint32_t now = timer_get_counter(TIM5) + timer_rollover_cnt;
+    DecodePpmFrame(now);
+  }
+  else if((TIM5_SR & TIM_SR_UIF) != 0) {
+    timer_rollover_cnt+=(1<<16);
+    timer_clear_flag(TIM5, TIM_SR_UIF);
+  }
+
+}
+
+
+#elif USE_PPM_TIM1
+
+#if defined(STM32F1)
+void tim1_up_isr(void) {
+#elif defined(STM32F4)
+void tim1_up_tim10_isr(void) {
+#endif
+  if((TIM1_SR & TIM_SR_UIF) != 0) {
+    timer_rollover_cnt+=(1<<16);
+    timer_clear_flag(TIM1, TIM_SR_UIF);
+  }
+}
+
+void tim1_cc_isr(void) {
+  if((TIM1_SR & PPM_CC_IF) != 0) {
+    timer_clear_flag(TIM1, PPM_CC_IF);
+
+    uint32_t now = timer_get_counter(TIM1) + timer_rollover_cnt;
+    DecodePpmFrame(now);
+  }
+}
+
+#elif USE_PPM_TIM8 && defined(STM32F4)
+
+#if defined(STM32F1)
+void tim8_up_isr(void) {
+#elif defined(STM32F4)
+void tim8_up_tim13_isr(void) {
+#endif
+  if((TIM8_SR & TIM_SR_UIF) != 0) {
+    timer_rollover_cnt+=(1<<16);
+    timer_clear_flag(TIM8, TIM_SR_UIF);
+  }
+}
+
+void tim8_cc_isr(void) {
+  if((TIM8_SR & PPM_CC_IF) != 0) {
+    timer_clear_flag(TIM8, PPM_CC_IF);
+
+    uint32_t now = timer_get_counter(TIM8) + timer_rollover_cnt;
+    DecodePpmFrame(now);
+  }
+}
+
+#endif /* USE_PPM_TIM1 */
+

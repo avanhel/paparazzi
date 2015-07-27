@@ -22,23 +22,23 @@
  */
 
 /**
- * @file module/nav/nav_catapult.h
+ * @file modules/nav/nav_catapult.h
  * @brief catapult launch timing system
  *
  *
- * Phase 1: -Zero Roll, Climb Pitch, Zero Throttle
- * Phase 2: After Feeling the Start Acceleration
- *          -Zero Roll, Climb Pitch, Full Throttle
- * Phase 3: After feeling the GPS heading (time based)
- *          -Place climb 300m in front of us
- *          -GoTo(climb)
-*/
+ * - Phase 1: Zero Roll, Climb Pitch, Zero Throttle
+ * - Phase 2: After detecting the Start Acceleration\n
+ *            Zero Roll, Climb Pitch, Full Throttle
+ * - Phase 3: After getting the GPS heading (time based)\n
+ *            Place climb 300m in front of us\n
+ *            GoTo(climb)
+ */
 
 
 
 #include "generated/airframe.h"
-#include "estimator.h"
-#include "ap_downlink.h"
+#include "state.h"
+#include "subsystems/datalink/downlink.h"
 #include "modules/nav/nav_catapult.h"
 #include "subsystems/nav.h"
 #include "generated/flight_plan.h"
@@ -48,9 +48,6 @@
 // Imu is required
 #include "subsystems/imu.h"
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 #include "mcu_periph/uart.h"
 #include "messages.h"
 #include "subsystems/datalink/datalink.h"
@@ -60,22 +57,22 @@ static bool_t nav_catapult_armed = FALSE;
 static uint16_t nav_catapult_launch = 0;
 
 #ifndef NAV_CATAPULT_ACCELERATION_THRESHOLD
-#define NAV_CATAPULT_ACCELERATION_THRESHOLD 1.5;
+#define NAV_CATAPULT_ACCELERATION_THRESHOLD 1.5
 #endif
 
 float nav_catapult_acceleration_threshold = NAV_CATAPULT_ACCELERATION_THRESHOLD;
 
 #ifndef NAV_CATAPULT_MOTOR_DELAY
-#define NAV_CATAPULT_MOTOR_DELAY  45		// Main Control Loops
+#define NAV_CATAPULT_MOTOR_DELAY  0.75		// seconds
 #endif
 
-int nav_catapult_motor_delay = NAV_CATAPULT_MOTOR_DELAY;
+float nav_catapult_motor_delay = NAV_CATAPULT_MOTOR_DELAY;
 
 #ifndef NAV_CATAPULT_HEADING_DELAY
-#define NAV_CATAPULT_HEADING_DELAY 180
+#define NAV_CATAPULT_HEADING_DELAY 3.0  // seconds
 #endif
 
-int nav_catapult_heading_delay = NAV_CATAPULT_HEADING_DELAY;
+float nav_catapult_heading_delay = NAV_CATAPULT_HEADING_DELAY;
 
 #ifndef NAV_CATAPULT_INITIAL_PITCH
 #define NAV_CATAPULT_INITIAL_PITCH RadOfDeg(10)
@@ -102,15 +99,18 @@ void nav_catapult_highrate_module(void)
   // Only run when
   if (nav_catapult_armed)
   {
-    if (nav_catapult_launch < nav_catapult_heading_delay)
-      nav_catapult_launch ++;
+    if (nav_catapult_launch < nav_catapult_heading_delay * NAV_CATAPULT_HIGHRATE_MODULE_FREQ) {
+      nav_catapult_launch++;
+    }
 
     // Launch detection Filter
     if (nav_catapult_launch < 5)
     {
       // Five consecutive measurements > 1.5
 #ifndef SITL
-      if (ACCEL_FLOAT_OF_BFP(imu.accel.x)  < (nav_catapult_acceleration_threshold * 9.81))
+      struct Int32Vect3 accel_meas_body;
+      INT32_RMAT_TRANSP_VMULT(accel_meas_body, imu.body_to_imu_rmat, imu.accel);
+      if (ACCEL_FLOAT_OF_BFP(accel_meas_body.x)  < (nav_catapult_acceleration_threshold * 9.81))
 #else
       if (launch != 1)
 #endif
@@ -119,7 +119,7 @@ void nav_catapult_highrate_module(void)
       }
     }
     // Launch was detected: Motor Delay Counter
-    else if (nav_catapult_launch == nav_catapult_motor_delay)
+    else if (nav_catapult_launch >= nav_catapult_motor_delay * NAV_CATAPULT_HIGHRATE_MODULE_FREQ)
     {
       // Turn on Motor
       NavVerticalThrottleMode(9600*(nav_catapult_initial_throttle));
@@ -153,12 +153,11 @@ bool_t nav_catapult(uint8_t _to, uint8_t _climb)
   nav_catapult_armed = 1;
 
   // No Roll, Climb Pitch, No motor Phase
-  if (nav_catapult_launch <= nav_catapult_motor_delay)
+  if (nav_catapult_launch <= nav_catapult_motor_delay * NAV_CATAPULT_HIGHRATE_MODULE_FREQ)
   {
     NavAttitude(RadOfDeg(0));
     NavVerticalAutoThrottleMode(nav_catapult_initial_pitch);
     NavVerticalThrottleMode(9600*(0));
-
 
 
     // Store take-off waypoint
@@ -166,12 +165,12 @@ bool_t nav_catapult(uint8_t _to, uint8_t _climb)
     WaypointY(_to) = GetPosY();
     WaypointAlt(_to) = GetPosAlt();
 
-    nav_catapult_x = estimator_x;
-    nav_catapult_y = estimator_y;
+    nav_catapult_x = stateGetPositionEnu_f()->x;
+    nav_catapult_y = stateGetPositionEnu_f()->y;
 
   }
   // No Roll, Climb Pitch, Full Power
-  else if (nav_catapult_launch < nav_catapult_heading_delay)
+  else if (nav_catapult_launch < nav_catapult_heading_delay * NAV_CATAPULT_HIGHRATE_MODULE_FREQ)
   {
     NavAttitude(RadOfDeg(0));
     NavVerticalAutoThrottleMode(nav_catapult_initial_pitch);
@@ -189,8 +188,8 @@ bool_t nav_catapult(uint8_t _to, uint8_t _climb)
     // Store Heading, move Climb
     nav_catapult_launch = 0xffff;
 
-    float dir_x = estimator_x - nav_catapult_x;
-    float dir_y = estimator_y - nav_catapult_y;
+    float dir_x = stateGetPositionEnu_f()->x - nav_catapult_x;
+    float dir_y = stateGetPositionEnu_f()->y - nav_catapult_y;
 
     float dir_L = sqrt(dir_x * dir_x + dir_y * dir_y);
 
@@ -203,7 +202,7 @@ bool_t nav_catapult(uint8_t _to, uint8_t _climb)
 
 return TRUE;
 
-}	// end of gls()
+}
 
 bool_t nav_select_touch_down(uint8_t _td)
 {
@@ -212,6 +211,4 @@ bool_t nav_select_touch_down(uint8_t _td)
   WaypointAlt(_td) = GetPosAlt();
   return FALSE;
 }
-
-
 

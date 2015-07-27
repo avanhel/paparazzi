@@ -1,17 +1,4 @@
 /*
- * Driver for the EagleTree Systems Airspeed Sensor
- * Has only been tested with V3 of the sensor hardware
- *
- * Notes:
- * Connect directly to TWOG/Tiny I2C port. Multiple sensors can be chained together.
- * Sensor should be in the proprietary mode (default) and not in 3rd party mode.
- *
- * Sensor module wire assignments:
- * Red wire: 5V
- * White wire: Ground
- * Yellow wire: SDA
- * Brown wire: SCL
- *
  * Copyright (C) 2009 Vassilis Varveropoulos
  * Modified by Mark Griffin on 8 September 2010 to work with new i2c transaction routines.
  * Converted by Gautier Hattenberger to modules (10/2010)
@@ -32,19 +19,37 @@
  * along with paparazzi; see the file COPYING.  If not, write to
  * the Free Software Foundation, 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
- *
  */
+
+/**
+ * @file modules/sensors/airspeed_ets.c
+ *
+ * Driver for the EagleTree Systems Airspeed Sensor.
+ * Has only been tested with V3 of the sensor hardware.
+ *
+ * Notes:
+ * Connect directly to TWOG/Tiny I2C port. Multiple sensors can be chained together.
+ * Sensor should be in the proprietary mode (default) and not in 3rd party mode.
+ *
+ * Sensor module wire assignments:
+ * Red wire: 5V
+ * White wire: Ground
+ * Yellow wire: SDA
+ * Brown wire: SCL
+ */
+
 #include "sensors/airspeed_ets.h"
-#include "estimator.h"
+#include "state.h"
 #include "mcu_periph/i2c.h"
 #include "mcu_periph/uart.h"
+#include "mcu_periph/sys_time.h"
 #include "messages.h"
 #include "subsystems/datalink/downlink.h"
 #include <math.h>
 
 #if !USE_AIRSPEED
-#ifndef SENSOR_SYNC_SEND
-#warning either set USE_AIRSPEED or SENSOR_SYNC_SEND to use ets_airspeed
+#ifndef AIRSPEED_ETS_SYNC_SEND
+#warning either set USE_AIRSPEED or AIRSPEED_ETS_SYNC_SEND to use ets_airspeed
 #endif
 #endif
 
@@ -64,10 +69,14 @@
 #ifndef AIRSPEED_ETS_I2C_DEV
 #define AIRSPEED_ETS_I2C_DEV i2c0
 #endif
+PRINT_CONFIG_VAR(AIRSPEED_ETS_I2C_DEV)
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
+/** delay in seconds until sensor is read after startup */
+#ifndef AIRSPEED_ETS_START_DELAY
+#define AIRSPEED_ETS_START_DELAY 0.2
 #endif
+PRINT_CONFIG_VAR(AIRSPEED_ETS_START_DELAY)
+
 
 // Global variables
 uint16_t airspeed_ets_raw;
@@ -84,6 +93,8 @@ volatile bool_t airspeed_ets_i2c_done;
 bool_t airspeed_ets_offset_init;
 uint32_t airspeed_ets_offset_tmp;
 uint16_t airspeed_ets_cnt;
+uint32_t airspeed_ets_delay_time;
+bool_t   airspeed_ets_delay_done;
 
 void airspeed_ets_init( void ) {
   int n;
@@ -92,7 +103,7 @@ void airspeed_ets_init( void ) {
   airspeed_ets_offset = 0;
   airspeed_ets_offset_tmp = 0;
   airspeed_ets_i2c_done = TRUE;
-  airspeed_ets_valid = TRUE;
+  airspeed_ets_valid = FALSE;
   airspeed_ets_offset_init = FALSE;
   airspeed_ets_cnt = AIRSPEED_ETS_OFFSET_NBSAMPLES_INIT + AIRSPEED_ETS_OFFSET_NBSAMPLES_AVRG;
 
@@ -101,15 +112,22 @@ void airspeed_ets_init( void ) {
     airspeed_ets_buffer[n] = 0.0;
 
   airspeed_ets_i2c_trans.status = I2CTransDone;
+
+  airspeed_ets_delay_done = FALSE;
+  SysTimeTimerStart(airspeed_ets_delay_time);
 }
 
 void airspeed_ets_read_periodic( void ) {
 #ifndef SITL
+  if (!airspeed_ets_delay_done) {
+    if (SysTimeTimer(airspeed_ets_delay_time) < USEC_OF_SEC(AIRSPEED_ETS_START_DELAY)) return;
+    else airspeed_ets_delay_done = TRUE;
+  }
   if (airspeed_ets_i2c_trans.status == I2CTransDone)
-    I2CReceive(AIRSPEED_ETS_I2C_DEV, airspeed_ets_i2c_trans, AIRSPEED_ETS_ADDR, 2);
-#else // SITL
+    i2c_receive(&AIRSPEED_ETS_I2C_DEV, &airspeed_ets_i2c_trans, AIRSPEED_ETS_ADDR, 2);
+#elif !defined USE_NPS
   extern float sim_air_speed;
-  EstimatorSetAirspeed(sim_air_speed);
+  stateSetAirspeed_f(&sim_air_speed);
 #endif //SITL
 }
 
@@ -167,9 +185,9 @@ void airspeed_ets_read_event( void ) {
       airspeed_ets += airspeed_ets_buffer[n];
     airspeed_ets = airspeed_ets / (float)AIRSPEED_ETS_NBSAMPLES_AVRG;
 #if USE_AIRSPEED
-    EstimatorSetAirspeed(airspeed_ets);
+    stateSetAirspeed_f(&airspeed_ets);
 #endif
-#ifdef SENSOR_SYNC_SEND
+#ifdef AIRSPEED_ETS_SYNC_SEND
     DOWNLINK_SEND_AIRSPEED_ETS(DefaultChannel, DefaultDevice, &airspeed_ets_raw, &airspeed_ets_offset, &airspeed_ets);
 #endif
   } else {

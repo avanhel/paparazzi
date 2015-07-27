@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2010 Martin Mueller
  *
  * This file is part of paparazzi.
@@ -43,9 +41,6 @@ float dust_gp2y_density_f;
 
 struct i2c_transaction gp2y_trans;
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #ifndef GP2Y_I2C_DEV
 #define GP2Y_I2C_DEV i2c0
@@ -59,9 +54,9 @@ void dust_gp2y_init( void ) {
 
 void dust_gp2y_periodic( void ) {
   if (dust_gp2y_status == DUST_GP2Y_IDLE) {
-    I2CReceive(GP2Y_I2C_DEV, gp2y_trans, GP2Y_SLAVE_ADDR, 2);
+    i2c_receive(&GP2Y_I2C_DEV, &gp2y_trans, GP2Y_SLAVE_ADDR, 2);
   }
-  else if (dust_gp2y_status == DUST_GP2Y_UNINIT && cpu_time_sec > 1) {
+  else if (dust_gp2y_status == DUST_GP2Y_UNINIT && sys_time.nb_sec > 1) {
     dust_gp2y_status = DUST_GP2Y_IDLE;
   }
 }

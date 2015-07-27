@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2010 Martin Mueller
  *
  * This file is part of paparazzi.
@@ -38,9 +36,6 @@
 float ftmd_temperature;
 struct i2c_transaction tmd_trans;
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #ifndef TEMOD_I2C_DEV
 #define TEMOD_I2C_DEV i2c0
@@ -57,7 +52,7 @@ void temod_init(void) {
 }
 
 void temod_periodic( void ) {
-    I2CReceive(TEMOD_I2C_DEV, tmd_trans, TEMOD_SLAVE_ADDR, 2);
+    i2c_receive(&TEMOD_I2C_DEV, &tmd_trans, TEMOD_SLAVE_ADDR, 2);
 }
 
 void temod_event( void ) {

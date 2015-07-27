@@ -29,5 +29,4 @@
 
 #include "stabilization_attitude_ref_int.h"
 
-
 #endif /* STABILIZATION_ATTITUDE_REF_EULER_INT_H */

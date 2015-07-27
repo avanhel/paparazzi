@@ -27,11 +27,50 @@
  *  Simple DirectMedia Layer library is used for cross-platform support.
  *  Joystick button and axes are mapped to RC commands directly with defines.
  *
- *  Currently it doesn't support different RC configurations.
+ *  You must have a joystick with either:
+ *    - 4 axes and 3 buttons, or
+ *    - 5 axes
+ *
+ *  First you should run sw/ground_segment/joystick/test_stick to determine
+ *  the indices of the physical axes and buttons on your joystick (and to test
+ *  that it actually works). Then you can assign each axis and button to a
+ *  command in your airframe file.
+ *
+ *  The default axes are Roll = 0, Pitch = 1, Yaw = 2 and Throttle = 3.
+ *  The default buttons are Manual = 0, Auto1 = 1, Auto2 = 2.
+ *
+ *  Example for 4 axes and 3 buttons using a joystick with 7 axes and 5 buttons:
+ *  @verbatim
+ *    <section name="SIMULATOR" prefix="NPS_">
+ *      ...
+ *      <define name="JS_AXIS_ROLL" value="2"/> <!-- Use joystick axis 2 for roll -->
+ *      <!-- Use joystick axis 1 for pitch (default) -->
+ *      <define name="JS_AXIS_YAW" value="3"/> <!-- Use joystick axis 3 for yaw -->
+ *      <define name="JS_AXIS_ROLL" value="6"/> <!-- Use joystick axis 6 for throttle -->
+ *      <define name="JS_BUTTON_MODE_MANUAL" value="3"/> <!-- Use joystick button 3 for manual -->
+ *      <!-- Use joystick button 1 for auto1 (default) -->
+ *      <!-- Use joystick button 2 for auto2 (default) -->
+ *    </section>
+ *  @endverbatim
+ *
+ *  One can define NPS_JS_AXIS_MODE to use an axis instead of buttons to change
+ *  You will need a 5-axis joystick.
+ *
+ *  If you need to reverse the direction of any axis, simply use:
+ *  @verbatim
+ *      <define name="JS_AXIS_PITCH_REVERSE" value="1"/>
+ *      <!-- value="1" is required, setting to zero or omitting disables reversing -->
+ *  @endverbatim
+ *
+ *  At this point, no other functionality or channels are supported for R/C control.
+ *
  */
 
 #include "nps_radio_control.h"
 #include "nps_radio_control_joystick.h"
+
+// for NPS_JS_AXIS_MODE
+#include "generated/airframe.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -39,17 +78,41 @@
 #include <SDL/SDL.h>
 
 // axes indice
-#define JS_ROLL     0
-#define JS_PITCH    1
-#define JS_YAW      2
-#define JS_THROTTLE 3
+#ifndef NPS_JS_AXIS_ROLL
+#define NPS_JS_AXIS_ROLL     0
+#endif
+#ifndef NPS_JS_AXIS_PITCH
+#define NPS_JS_AXIS_PITCH    1
+#endif
+#ifndef NPS_JS_AXIS_YAW
+#define NPS_JS_AXIS_YAW      2
+#endif
+#ifndef NPS_JS_AXIS_THROTTLE
+#define NPS_JS_AXIS_THROTTLE 3
+#endif
+
+#ifndef NPS_JS_AXIS_MODE
 #define JS_NB_AXIS  4
+#else
+#define JS_NB_AXIS 5
+#endif
 
 // buttons to switch modes
-#define JS_MODE_MANUAL 4
-#define JS_MODE_AUTO1  5
-#define JS_MODE_AUTO2  6
+#ifndef NPS_JS_BUTTON_MODE_MANUAL
+#define NPS_JS_BUTTON_MODE_MANUAL 1
+#endif
+#ifndef NPS_JS_BUTTON_MODE_AUTO1
+#define NPS_JS_BUTTON_MODE_AUTO1  2
+#endif
+#ifndef NPS_JS_BUTTON_MODE_AUTO2
+#define NPS_JS_BUTTON_MODE_AUTO2  3
+#endif
+
+#ifndef NPS_JS_AXIS_MODE
 #define JS_NB_BUTTONS  3
+#else
+#define JS_NB_BUTTONS 0
+#endif
 
 NpsJoystick nps_joystick;
 SDL_Joystick *sdl_joystick;
@@ -120,12 +183,15 @@ int nps_radio_control_joystick_init(const char* device) {
   else if (SDL_JoystickNumAxes(sdl_joystick) < JS_NB_AXIS)
   {
     printf("Selected joystick does not support enough axes!\n");
+    printf("Number of axes required: %i\n", JS_NB_AXIS);
+    printf("Number of axes available: %i\n",SDL_JoystickNumAxes(sdl_joystick));
     SDL_JoystickClose(sdl_joystick);
     exit(-1);
   }
   else if (SDL_JoystickNumButtons(sdl_joystick) < JS_NB_BUTTONS)
   {
     printf("Selected joystick does not support enough buttons!\n");
+    printf("Buttons supported: %d  needed: %d\n", SDL_JoystickNumButtons(sdl_joystick), JS_NB_BUTTONS);
     SDL_JoystickClose(sdl_joystick);
     exit(-1);
   }
@@ -142,47 +208,72 @@ int nps_radio_control_joystick_init(const char* device) {
  */
 void nps_radio_control_joystick_update(void) {
 
-  nps_joystick.throttle = ((float)(SDL_JoystickGetAxis(sdl_joystick,JS_THROTTLE)) - 32767.)/-65534.;
-  nps_joystick.roll = (float)(SDL_JoystickGetAxis(sdl_joystick,JS_ROLL))/32767.;
-  nps_joystick.pitch = (float)(SDL_JoystickGetAxis(sdl_joystick,JS_PITCH))/32767.;
-  nps_joystick.yaw = (float)(SDL_JoystickGetAxis(sdl_joystick,JS_YAW))/32767.;
+#if NPS_JS_AXIS_THROTTLE_REVERSED
+  nps_joystick.throttle = ((float)(-1 * SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_THROTTLE)) - 32767.)/-65534.;
+#else
+  nps_joystick.throttle = ((float)(SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_THROTTLE)) - 32767.)/-65534.;
+#endif
+#if NPS_JS_AXIS_ROLL_REVERSED
+  nps_joystick.roll = (float)(-1 * SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_ROLL))/32767.;
+#else
+  nps_joystick.roll = (float)(SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_ROLL))/32767.;
+#endif
+#if NPS_JS_AXIS_PITCH_REVERSED
+  nps_joystick.pitch = (float)(-1 * SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_PITCH))/32767.;
+#else
+  nps_joystick.pitch = (float)(SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_PITCH))/32767.;
+#endif
+#if NPS_JS_AXIS_YAW_REVERSED
+  nps_joystick.yaw = (float)(-1 * SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_YAW))/32767.;
+#else
+  nps_joystick.yaw = (float)(SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_YAW))/32767.;
+#endif
+  // if an axis is asigned to the mode, use it instead of the buttons
+#ifdef NPS_JS_AXIS_MODE
+#if NPS_JS_AXIS_MODE_REVERSED
+  nps_joystick.mode = (float)(-1 * SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_MODE))/32767.;
+#else
+  nps_joystick.mode = (float)(SDL_JoystickGetAxis(sdl_joystick,NPS_JS_AXIS_MODE))/32767.;
+#endif
+#endif
 
   while(SDL_PollEvent(&sdl_event))
   {
     switch(sdl_event.type)
     {
       case SDL_JOYBUTTONDOWN:
-      {
-	switch(sdl_event.jbutton.button)
-	{
-	  case JS_MODE_MANUAL:
-          nps_joystick.mode = MODE_SWITCH_MANUAL;
-	  break;
+        {
+          switch(sdl_event.jbutton.button)
+          {
+#ifndef NPS_JS_AXIS_MODE
+            case NPS_JS_BUTTON_MODE_MANUAL:
+              nps_joystick.mode = MODE_SWITCH_MANUAL;
+              break;
 
-	  case JS_MODE_AUTO1:
-	  nps_joystick.mode = MODE_SWITCH_AUTO1;
-	  break;
+            case NPS_JS_BUTTON_MODE_AUTO1:
+              nps_joystick.mode = MODE_SWITCH_AUTO1;
+              break;
 
-	  case JS_MODE_AUTO2:
-	  nps_joystick.mode = MODE_SWITCH_AUTO2;
-	  break;
-
-	  default:
-	  //ignore
-	  break;
+            case NPS_JS_BUTTON_MODE_AUTO2:
+              nps_joystick.mode = MODE_SWITCH_AUTO2;
+              break;
+#endif
+            default:
+              //ignore
+              break;
+          }
         }
-      }
-      break;
+        break;
 
       case SDL_QUIT:
-      printf("Quitting...\n");
-      exit(-1);
-      break;
+        printf("Quitting...\n");
+        exit(-1);
+        break;
 
       default:
-      //do nothing
-      printf("unknown SDL event!!!\n");
-      break;
+        //do nothing
+        printf("unknown SDL event!!!\n");
+        break;
     }
   }
 }

@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2008-2009 Antoine Drouin <poinix@gmail.com>
  *
  * This file is part of paparazzi.
@@ -21,11 +19,19 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file subsystems/ins/hf_float.h
+ *
+ * Horizontal filter (x,y) to estimate position and velocity.
+ *
+ */
+
 #ifndef HF_FLOAT_H
 #define HF_FLOAT_H
 
 #include "std.h"
 #include "math/pprz_algebra_float.h"
+#include "generated/airframe.h"
 
 #define HFF_STATE_SIZE 2
 
@@ -75,7 +81,7 @@ extern float b2_hff_ydd_meas;
 
 extern void b2_hff_init(float init_x, float init_xdot, float init_y, float init_ydot);
 extern void b2_hff_propagate(void);
-extern void b2_hff_update_gps(void);
+extern void b2_hff_update_gps(struct FloatVect2* pos_ned, struct FloatVect2* speed_ned);
 extern void b2_hff_update_pos(struct FloatVect2 pos, struct FloatVect2 Rpos);
 extern void b2_hff_update_vel(struct FloatVect2 vel, struct FloatVect2 Rvel);
 extern void b2_hff_realign(struct FloatVect2 pos, struct FloatVect2 vel);

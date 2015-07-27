@@ -1,4 +1,4 @@
-/* 
+/*
    $Id$
 
    Copyright (C) 2004 Pascal Brisset, Antoine Drouin
@@ -20,8 +20,8 @@
  You should have received a copy of the GNU General Public License
  along with paparazzi; see the file COPYING.  If not, write to
  the Free Software Foundation, 59 Temple Place - Suite 330,
- Boston, MA 02111-1307, USA.  
-*/ 
+ Boston, MA 02111-1307, USA.
+*/
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -30,7 +30,38 @@
 #include "caml/mlvalues.h"
 #include "caml/alloc.h"
 
-value 
+#ifdef ARCH_ALIGN_DOUBLE
+value
+c_float_of_indexed_bytes(value s, value index)
+{
+  char *x = (char *)(String_val(s) + Int_val(index));
+
+  //Assert(sizeof(float) == 4);
+  union { char b[4]; float f; } buffer;
+  buffer.b[0] = x[0];
+  buffer.b[1] = x[1];
+  buffer.b[2] = x[2];
+  buffer.b[3] = x[3];
+
+  return copy_double((double)buffer.f);
+}
+
+value
+c_double_of_indexed_bytes(value s, value index)
+{
+  char *x = (char *)(String_val(s) + Int_val(index));
+
+  //Assert(sizeof(double) == 8);
+  union { char b[sizeof(double)]; double d; } buffer;
+  int i;
+  for (i=0; i < sizeof(double); i++) {
+    buffer.b[i] = x[i];
+  }
+  return copy_double(buffer.d);
+}
+
+#else /* no ARCH_ALIGN_DOUBLE */
+value
 c_float_of_indexed_bytes(value s, value index)
 {
   float *x = (float*)(String_val(s) + Int_val(index));
@@ -38,13 +69,14 @@ c_float_of_indexed_bytes(value s, value index)
   return copy_double((double)(*x));
 }
 
-value 
+value
 c_double_of_indexed_bytes(value s, value index)
 {
   double *x = (double*)(String_val(s) + Int_val(index));
 
   return copy_double(*x);
 }
+#endif /* ARCH_ALIGN_DOUBLE */
 
 value
 c_sprint_float(value s, value index, value f) {
@@ -83,6 +115,13 @@ c_sprint_int32(value s, value index, value x) {
 }
 
 value
+c_sprint_int64(value s, value index, value x) {
+  int64_t *p = (int64_t*) (String_val(s) + Int_val(index));
+  *p = (int64_t)Int64_val(x);
+  return Val_unit;
+}
+
+value
 c_int16_of_indexed_bytes(value s, value index)
 {
   int16_t *x = (int16_t*)(String_val(s) + Int_val(index));
@@ -105,3 +144,26 @@ c_int32_of_indexed_bytes(value s, value index)
 
   return copy_int32(*x);
 }
+
+#ifdef ARCH_ALIGN_INT64
+value
+c_int64_of_indexed_bytes(value s, value index)
+{
+  char *x = (char *)(String_val(s) + Int_val(index));
+
+  union { char b[sizeof(int64_t)]; int64_t i; } buffer;
+  int i;
+  for (i=0; i < sizeof(int64_t); i++) {
+    buffer.b[i] = x[i];
+  }
+  return copy_int64(buffer.i);
+}
+#else
+value
+c_int64_of_indexed_bytes(value s, value index)
+{
+  int64_t *x = (int64_t*)(String_val(s) + Int_val(index));
+
+  return copy_int64(*x);
+}
+#endif

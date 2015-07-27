@@ -17,7 +17,6 @@
  * Boston, MA 02111-1307, USA.
  *
  */
-#include "estimator.h"
 #include "mcu_periph/i2c.h"
 #include "mcu_periph/uart.h"
 #include "messages.h"
@@ -31,9 +30,6 @@ int32_t mag_x, mag_y, mag_z;
 bool_t mag_valid;
 
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 
 void hmc5843_module_init( void ) {

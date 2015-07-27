@@ -28,16 +28,16 @@
 #include "std.h"
 #include "mcu_periph/i2c.h"
 
-#define BARO_AMSYS_DT 0.05
+/// new measurement every baro_amsys_read_periodic
+#define BARO_AMSYS_DT BARO_AMSYS_READ_PERIODIC_PERIOD
 
-// extern uint16_t baro_amsys_adc;
+extern uint16_t baro_amsys_adc;
 // extern float baro_amsys_offset;
-// extern bool_t baro_amsys_valid;
-// extern bool_t baro_amsys_updated;
-// extern bool_t baro_amsys_enabled;
+extern bool_t baro_amsys_valid;
+extern bool_t baro_amsys_enabled;
 extern float baro_amsys_altitude;
-// extern float baro_amsys_r;
-// extern float baro_amsys_sigma2;
+extern float baro_amsys_r;
+extern float baro_amsys_sigma2;
 extern float baro_filter;
 
 extern struct i2c_transaction baro_amsys_i2c_trans;

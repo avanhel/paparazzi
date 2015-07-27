@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Gautier Hattenberger
+ * Copyright (C) 2011-2013 Gautier Hattenberger
  *
  * This file is part of paparazzi.
  *
@@ -26,20 +26,12 @@
 
 
 
-#ifndef BOARDS_UMARIM_BARO_H
-#define BOARDS_UMARIM_BARO_H
+#ifndef BOARDS_NAVGO_BARO_H
+#define BOARDS_NAVGO_BARO_H
 
+extern void navgo_baro_event(void);
 
-#include "std.h"
-#include "peripherals/mcp355x.h"
+// define BaroEvent macro
+#define BaroEvent navgo_baro_event
 
-#define BaroEvent(_b_abs_handler, _b_diff_handler) {  \
-  mcp355x_event();                                    \
-  if (mcp355x_data_available) {                       \
-    baro.absolute = mcp355x_data; \
-    _b_abs_handler();                                 \
-    mcp355x_data_available = FALSE;                   \
-  }                                                   \
-}
-
-#endif // BOARDS_UMARIM_BARO_H
+#endif // BOARDS_NAVGO_BARO_H

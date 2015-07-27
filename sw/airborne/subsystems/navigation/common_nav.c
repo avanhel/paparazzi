@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2007-2009  ENAC, Pascal Brisset, Antoine Drouin
  *
  * This file is part of paparazzi.
@@ -19,12 +17,16 @@
  * along with paparazzi; see the file COPYING.  If not, write to
  * the Free Software Foundation, 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
+ */
+
+/**
+ * @file subsystems/navigation/common_nav.c
  *
  */
 
 #include "subsystems/navigation/common_nav.h"
-#include "estimator.h"
 #include "generated/flight_plan.h"
+#include "subsystems/ins.h"
 #include "subsystems/gps.h"
 #include "math/pprz_geodetic_float.h"
 
@@ -47,17 +49,48 @@ float max_dist_from_home = MAX_DIST_FROM_HOME;
  * \a too_far_from_home
  */
 void compute_dist2_to_home(void) {
-  float ph_x = waypoints[WP_HOME].x - estimator_x;
-  float ph_y = waypoints[WP_HOME].y - estimator_y;
+  struct EnuCoor_f* pos = stateGetPositionEnu_f();
+  float ph_x = waypoints[WP_HOME].x - pos->x;
+  float ph_y = waypoints[WP_HOME].y - pos->y;
   dist2_to_home = ph_x*ph_x + ph_y *ph_y;
   too_far_from_home = dist2_to_home > (MAX_DIST_FROM_HOME*MAX_DIST_FROM_HOME);
 #if defined InAirspace
-  too_far_from_home = too_far_from_home || !(InAirspace(estimator_x, estimator_y));
+  too_far_from_home = too_far_from_home || !(InAirspace(pos_x, pos_y));
 #endif
 }
 
 
 static float previous_ground_alt;
+
+/** Reset the UTM zone to current GPS fix */
+unit_t nav_reset_utm_zone(void) {
+
+  struct UtmCoor_f utm0_old;
+  utm0_old.zone = nav_utm_zone0;
+  utm0_old.north = nav_utm_north0;
+  utm0_old.east = nav_utm_east0;
+  utm0_old.alt = ground_alt;
+  struct LlaCoor_f lla0;
+  lla_of_utm_f(&lla0, &utm0_old);
+
+#ifdef GPS_USE_LATLONG
+  /* Set the real UTM zone */
+  nav_utm_zone0 = (DegOfRad(gps.lla_pos.lon/1e7)+180) / 6 + 1;
+#else
+  nav_utm_zone0 = gps.utm_pos.zone;
+#endif
+
+  struct UtmCoor_f utm0;
+  utm0.zone = nav_utm_zone0;
+  utm_of_lla_f(&utm0, &lla0);
+
+  nav_utm_east0 = utm0.east;
+  nav_utm_north0 = utm0.north;
+
+  stateSetLocalUtmOrigin_f(&utm0);
+
+  return 0;
+}
 
 /** Reset the geographic reference to the current GPS fix */
 unit_t nav_reset_reference( void ) {
@@ -82,6 +115,15 @@ unit_t nav_reset_reference( void ) {
 
   previous_ground_alt = ground_alt;
   ground_alt = gps.hmsl/1000.;
+
+  // reset state UTM ref
+  struct UtmCoor_f utm0 = { nav_utm_north0, nav_utm_east0, ground_alt, nav_utm_zone0 };
+  stateSetLocalUtmOrigin_f(&utm0);
+
+  // realign INS if needed
+  ins.hf_realign = TRUE;
+  ins.vf_realign = TRUE;
+
   return 0;
 }
 

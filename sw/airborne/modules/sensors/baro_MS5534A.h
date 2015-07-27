@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2007  ENAC
  *
  * This file is part of paparazzi.
@@ -22,8 +20,9 @@
  *
  */
 
-/** \file baro_MS5534A.h
- *  \brief Handling of the MS5534a pressure sensor
+/**
+ * @file modules/sensors/baro_MS5534A.h
+ * @brief Handling of the MS5534a pressure sensor
  *
  */
 

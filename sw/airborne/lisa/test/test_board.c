@@ -155,6 +155,7 @@ static void test_baro_start(void) {all_led_green();}
 static void test_baro_periodic(void) {
   RunOnceEvery(2, {baro_periodic();});
   RunOnceEvery(100,{
+      uint16_t i2c2_queue_full_cnt        = i2c2.errors->queue_full_cnt;
       uint16_t i2c2_ack_fail_cnt          = i2c2.errors->ack_fail_cnt;
       uint16_t i2c2_miss_start_stop_cnt   = i2c2.errors->miss_start_stop_cnt;
       uint16_t i2c2_arb_lost_cnt          = i2c2.errors->arb_lost_cnt;
@@ -166,6 +167,7 @@ static void test_baro_periodic(void) {
       uint32_t i2c2_last_unexpected_event = i2c2.errors->last_unexpected_event;
       const uint8_t _bus2 = 2;
       DOWNLINK_SEND_I2C_ERRORS(DefaultChannel, DefaultDevice,
+                               &i2c2_queue_full_cnt,
                                &i2c2_ack_fail_cnt,
                                &i2c2_miss_start_stop_cnt,
                                &i2c2_arb_lost_cnt,
@@ -200,6 +202,7 @@ static void test_bldc_periodic(void) {
   i2c1_transmit(0x58, 1, NULL);
 
   RunOnceEvery(100,{
+      uint16_t i2c1_queue_full_cnt        = i2c1.errors->queue_full_cnt;
       uint16_t i2c1_ack_fail_cnt          = i2c1.errors->ack_fail_cnt;
       uint16_t i2c1_miss_start_stop_cnt   = i2c1.errors->miss_start_stop_cnt;
       uint16_t i2c1_arb_lost_cnt          = i2c1.errors->arb_lost_cnt;
@@ -211,6 +214,7 @@ static void test_bldc_periodic(void) {
       uint32_t i2c1_last_unexpected_event = i2c1.errors->last_unexpected_event;
       const uint8_t _bus1 = 1;
       DOWNLINK_SEND_I2C_ERRORS(DefaultChannel, DefaultDevice,
+                               &i2c1_queue_full_cnt,
                                &i2c1_ack_fail_cnt,
                                &i2c1_miss_start_stop_cnt,
                                &i2c1_arb_lost_cnt,
@@ -267,9 +271,9 @@ static void test_uart_periodic(void) {
 
   if (idx_tx<sizeof(buf_src)) {
     switch (direction) {
-    case OneToThree : Uart1Transmit(buf_src[idx_tx]); break;
-    case ThreeToOne : Uart3Transmit(buf_src[idx_tx]); break;
-    default: break;
+      case OneToThree : uart_transmit(&uart1, buf_src[idx_tx]); break;
+      case ThreeToOne : uart_transmit(&uart3, buf_src[idx_tx]); break;
+      default: break;
     }
     idx_tx++;
   }
@@ -278,8 +282,8 @@ static void test_uart_periodic(void) {
 
 static void test_uart_event(void) {
 
-  if (Uart3ChAvailable()) {
-    buf_dest[idx_rx] = Uart3Getch();
+  if (uart_char_available(&uart3)) {
+    buf_dest[idx_rx] = uart_getch(&uart3);
     if (idx_rx<sizeof(buf_src)) {
       DOWNLINK_SEND_DEBUG(DefaultChannel, DefaultDevice, sizeof(buf_src), buf_dest);
       idx_rx++;
@@ -296,8 +300,8 @@ static void test_uart_event(void) {
     }
   }
 
-  if (Uart1ChAvailable()) {
-    buf_dest[idx_rx] = Uart1Getch();
+  if (uart_char_available(&uart1)) {
+    buf_dest[idx_rx] = uart_getch(&uart1);
     if (idx_rx<sizeof(buf_src)) {
       DOWNLINK_SEND_DEBUG(DefaultChannel, DefaultDevice, sizeof(buf_src), buf_dest);
       idx_rx++;

@@ -1,7 +1,5 @@
 /*
- * $Id$
- *
- * Copyright (C) 2009 Antoine Drouin <poinix@gmail.com>
+ * Copyright (C) 2009-2012 The Paparazzi Team
  *
  * This file is part of paparazzi.
  *
@@ -21,8 +19,11 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/*
- * Hardware level I2C handling
+/**
+ * @file arch/stm32/mcu_periph/i2c_arch.h
+ * @ingroup stm32_arch
+ *
+ * Hardware level I2C handling for the STM32.
  */
 
 #ifndef I2C_HW_H
@@ -40,15 +41,22 @@ extern void i2c1_er_irq_handler(void);
 #endif /* USE_I2C1 */
 
 
-
 #ifdef USE_I2C2
 
 extern void i2c2_hw_init(void);
 extern void i2c2_ev_irq_handler(void);
 extern void i2c2_er_irq_handler(void);
 
-
 #endif /* USE_I2C2 */
+
+
+#if defined USE_I2C3 && defined STM32F4
+
+extern void i2c3_hw_init(void);
+extern void i2c3_ev_irq_handler(void);
+extern void i2c3_er_irq_handler(void);
+
+#endif /* USE_I2C3 */
 
 
 #endif /* I2C_HW_H */

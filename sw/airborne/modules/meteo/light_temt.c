@@ -1,6 +1,4 @@
 /*
- * $Id: light_temt.c $
- *
  * Copyright (C) 2010 Martin Mueller
  *
  * This file is part of paparazzi.
@@ -43,9 +41,6 @@
 #define ADC_CHANNEL_LIGHT_NB_SAMPLES 16
 #endif
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 uint16_t adc_light_temt;
 

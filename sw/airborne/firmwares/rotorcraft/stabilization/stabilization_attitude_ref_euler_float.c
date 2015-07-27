@@ -1,5 +1,6 @@
-#include "firmwares/rotorcraft/stabilization.h"
-
+#include "firmwares/rotorcraft/stabilization/stabilization_attitude_ref_euler_float.h"
+#include "firmwares/rotorcraft/stabilization/stabilization_attitude_ref_saturate.h"
+#include "generated/airframe.h"
 
 struct FloatEulers stab_att_sp_euler;
 struct FloatEulers stab_att_ref_euler;
@@ -19,26 +20,38 @@ void stabilization_attitude_ref_init(void) {
 /*
  * Reference
  */
-#define DT_UPDATE (1./512.)
+#define DT_UPDATE (1./PERIODIC_FREQUENCY)
 
-#define REF_ACCEL_MAX_P STABILIZATION_ATTITUDE_FLOAT_REF_MAX_PDOT
-#define REF_ACCEL_MAX_Q STABILIZATION_ATTITUDE_FLOAT_REF_MAX_QDOT
-#define REF_ACCEL_MAX_R STABILIZATION_ATTITUDE_FLOAT_REF_MAX_RDOT
+#define REF_ACCEL_MAX_P STABILIZATION_ATTITUDE_REF_MAX_PDOT
+#define REF_ACCEL_MAX_Q STABILIZATION_ATTITUDE_REF_MAX_QDOT
+#define REF_ACCEL_MAX_R STABILIZATION_ATTITUDE_REF_MAX_RDOT
 
-#define REF_RATE_MAX_P STABILIZATION_ATTITUDE_FLOAT_REF_MAX_P
-#define REF_RATE_MAX_Q STABILIZATION_ATTITUDE_FLOAT_REF_MAX_Q
-#define REF_RATE_MAX_R STABILIZATION_ATTITUDE_FLOAT_REF_MAX_R
+#define REF_RATE_MAX_P STABILIZATION_ATTITUDE_REF_MAX_P
+#define REF_RATE_MAX_Q STABILIZATION_ATTITUDE_REF_MAX_Q
+#define REF_RATE_MAX_R STABILIZATION_ATTITUDE_REF_MAX_R
 
-#define OMEGA_P   STABILIZATION_ATTITUDE_FLOAT_REF_OMEGA_P
-#define OMEGA_Q   STABILIZATION_ATTITUDE_FLOAT_REF_OMEGA_Q
-#define OMEGA_R   STABILIZATION_ATTITUDE_FLOAT_REF_OMEGA_R
+#define OMEGA_P   STABILIZATION_ATTITUDE_REF_OMEGA_P
+#define OMEGA_Q   STABILIZATION_ATTITUDE_REF_OMEGA_Q
+#define OMEGA_R   STABILIZATION_ATTITUDE_REF_OMEGA_R
 
-#define ZETA_P    STABILIZATION_ATTITUDE_FLOAT_REF_ZETA_P
-#define ZETA_Q    STABILIZATION_ATTITUDE_FLOAT_REF_ZETA_Q
-#define ZETA_R    STABILIZATION_ATTITUDE_FLOAT_REF_ZETA_R
+#define ZETA_P    STABILIZATION_ATTITUDE_REF_ZETA_P
+#define ZETA_Q    STABILIZATION_ATTITUDE_REF_ZETA_Q
+#define ZETA_R    STABILIZATION_ATTITUDE_REF_ZETA_R
 
 
 #define USE_REF 1
+
+static inline void reset_psi_ref_from_body(void) {
+  //sp has been set from body using stabilization_attitude_get_yaw_f, use that value
+  stab_att_ref_euler.psi = stab_att_sp_euler.psi;
+  stab_att_ref_rate.r = 0;
+  stab_att_ref_accel.r = 0;
+}
+
+void stabilization_attitude_ref_enter()
+{
+  reset_psi_ref_from_body();
+}
 
 void stabilization_attitude_ref_update() {
 
@@ -69,8 +82,8 @@ void stabilization_attitude_ref_update() {
   stab_att_ref_accel.r = -2.*ZETA_R*OMEGA_P*stab_att_ref_rate.r - OMEGA_R*OMEGA_R*ref_err.psi;
 
   /*	saturate acceleration */
-  const struct Int32Rates MIN_ACCEL = { -REF_ACCEL_MAX_P, -REF_ACCEL_MAX_Q, -REF_ACCEL_MAX_R };
-  const struct Int32Rates MAX_ACCEL = {  REF_ACCEL_MAX_P,  REF_ACCEL_MAX_Q,  REF_ACCEL_MAX_R }; \
+  const struct FloatRates MIN_ACCEL = { -REF_ACCEL_MAX_P, -REF_ACCEL_MAX_Q, -REF_ACCEL_MAX_R };
+  const struct FloatRates MAX_ACCEL = {  REF_ACCEL_MAX_P,  REF_ACCEL_MAX_Q,  REF_ACCEL_MAX_R };
   RATES_BOUND_BOX(stab_att_ref_accel, MIN_ACCEL, MAX_ACCEL);
 
   /* saturate speed and trim accel accordingly */

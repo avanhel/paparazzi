@@ -1,6 +1,4 @@
 /*
- * Paparazzi $Id: $
- *
  * Copyright (C) 2010 ENAC
  *
  * This file is part of paparazzi.
@@ -80,7 +78,7 @@ extern struct ImuXsens imu_xsens;
 
 
 /* use Xsens as a full INS solution */
-#if USE_INS
+#if USE_INS_MODULE
 #define InsEvent(_ins_handler) {	\
   InsEventCheckAndHandle(handle_ins_msg()) 			\
 }

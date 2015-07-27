@@ -26,12 +26,13 @@
 
 
 #include "pressure_board_navarro.h"
-#include "estimator.h"
+#include "state.h"
+#include "subsystems/abi.h"
 
 /* Default I2C device on tiny is i2c0
  */
-#ifndef PBN_I2C_DEVICE
-#define PBN_I2C_DEVICE i2c0
+#ifndef PBN_I2C_DEV
+#define PBN_I2C_DEV i2c0
 #endif
 
 /* Sensor I2C slave address */
@@ -55,6 +56,11 @@
 #ifndef PBN_ALTITUDE_SCALE
 #define PBN_ALTITUDE_SCALE 0.32
 #endif
+
+#ifndef PBN_PRESSURE_OFFSET
+#define PBN_PRESSURE_OFFSET 101325.0
+#endif
+
 
 // Global variables
 uint16_t altitude_adc;
@@ -96,7 +102,7 @@ void pbn_periodic( void ) {
 
   // Initiate next read
   pbn_trans.buf[0] = 0;
-  I2CTransceive(PBN_I2C_DEVICE, pbn_trans, PBN_I2C_ADDR, 1, 4);
+  i2c_transceive(&PBN_I2C_DEV, &pbn_trans, PBN_I2C_ADDR, 1, 4);
 
 }
 
@@ -132,6 +138,9 @@ void pbn_read_event( void ) {
       --offset_cnt;
     }
     else {
+      // Compute pressure
+      float pressure = PBN_ALTITUDE_SCALE * (float) altitude_adc + PBN_PRESSURE_OFFSET;
+      AbiSendMsgBARO_ABS(BARO_PBN_SENDER_ID, &pressure);
       // Compute airspeed and altitude
       //pbn_airspeed = (-4.45 + sqrtf(19.84-0.57*(float)(airspeed_offset-airspeed_adc)))/0.28;
       uint16_t diff = Max(airspeed_adc-airspeed_offset, 0);
@@ -140,10 +149,8 @@ void pbn_read_event( void ) {
 
       pbn_airspeed = (airspeed_filter*pbn_airspeed + tmp_airspeed) / (airspeed_filter + 1.);
 #if USE_AIRSPEED
-      EstimatorSetAirspeed(pbn_airspeed);
+      stateSetAirspeed_f(&pbn_airspeed);
 #endif
-      //alt_kalman(pbn_altitude);
-
     }
 
   }

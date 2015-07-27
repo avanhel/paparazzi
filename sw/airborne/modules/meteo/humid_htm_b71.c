@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2011 Martin Mueller <martinmm@pfump.org>
  *
  * This file is part of paparazzi.
@@ -38,9 +36,6 @@
 #include "messages.h"
 #include "subsystems/datalink/downlink.h"
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #ifndef HTM_I2C_DEV
 #define HTM_I2C_DEV i2c0
@@ -59,9 +54,9 @@ void humid_htm_init(void) {
 }
 
 void humid_htm_start( void ) {
-  if (cpu_time_sec > 1) {
+  if (sys_time.nb_sec > 1) {
     /* measurement request: wake up sensor, sample temperature/humidity */
-    I2CTransmit(HTM_I2C_DEV, htm_trans, HTM_SLAVE_ADDR, 0);
+    i2c_transmit(&HTM_I2C_DEV, &htm_trans, HTM_SLAVE_ADDR, 0);
     htm_status = HTM_MR;
   }
 }
@@ -71,7 +66,7 @@ void humid_htm_read( void ) {
   if (htm_status == HTM_MR_OK) {
     /* read humid and temp*/
     htm_status = HTM_READ_DATA;
-    I2CReceive(HTM_I2C_DEV, htm_trans, HTM_SLAVE_ADDR, 4);
+    i2c_receive(&HTM_I2C_DEV, &htm_trans, HTM_SLAVE_ADDR, 4);
   }
 }
 

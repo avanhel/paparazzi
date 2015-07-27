@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2010 The Paparazzi Team
  *
  * This file is part of paparazzi.
@@ -60,9 +58,6 @@ static uint8_t mag_state = 0;
 static volatile uint8_t mag_ready_for_read = FALSE;
 static uint8_t reading_mag = FALSE;
 
-extern void exti9_5_isr(void);
-
-
 int main(void) {
   main_init();
 
@@ -90,6 +85,7 @@ static inline void main_periodic_task( void ) {
   });
   RunOnceEvery(256,
     {
+      uint16_t i2c2_queue_full_cnt        = i2c2.errors->queue_full_cnt;
       uint16_t i2c2_ack_fail_cnt          = i2c2.errors->ack_fail_cnt;
       uint16_t i2c2_miss_start_stop_cnt   = i2c2.errors->miss_start_stop_cnt;
       uint16_t i2c2_arb_lost_cnt          = i2c2.errors->arb_lost_cnt;
@@ -101,6 +97,7 @@ static inline void main_periodic_task( void ) {
       uint32_t i2c2_last_unexpected_event = i2c2.errors->last_unexpected_event;
       const uint8_t _bus2 = 2;
       DOWNLINK_SEND_I2C_ERRORS(DefaultChannel, DefaultDevice,
+                               &i2c2_queue_full_cnt,
                                &i2c2_ack_fail_cnt,
                                &i2c2_miss_start_stop_cnt,
                                &i2c2_arb_lost_cnt,

@@ -1,6 +1,4 @@
 (*
- * $Id$
- *
  * Paparazzi center main module
  *
  * Copyright (C) 2007 ENAC, Pascal Brisset, Antoine Drouin
@@ -137,7 +135,7 @@ let quit_button_callback = fun gui ac_combo session_combo target_combo () ->
 	  Sys.rename Utils.backup_xml_file Utils.conf_xml_file;
 	  quit_callback gui ac_combo session_combo target_combo ()
       | 3 ->
-	  ignore (Sys.command (sprintf "tkdiff %s %s" Utils.backup_xml_file Utils.conf_xml_file));
+	  ignore (Sys.command (sprintf "meld %s %s" Utils.backup_xml_file Utils.conf_xml_file));
 	  question_box ()
       | 1 ->
 	  Sys.remove Utils.backup_xml_file;
@@ -175,9 +173,10 @@ let () =
 
   if Sys.file_exists Utils.backup_xml_file then begin
     let rec question_box = fun () ->
-      match GToolbox.question_box ~title:"Backup" ~buttons:["Keep changes"; "Discard changes"; "View changes"] ~default:2 "Configuration changes made during the last session were not saved. ?" with
+      let message = "Configuration changes to conf/conf.xml were not saved during the last session.\nIf you made any manual changes to conf/conf.xml and choose [Discard changes] you will also lose these." in
+      match GToolbox.question_box ~title:"Backup" ~buttons:["Keep changes"; "Discard changes"; "View changes"] ~default:2 message with
       | 2 -> Sys.rename Utils.backup_xml_file Utils.conf_xml_file
-      | 3 -> ignore (Sys.command (sprintf "tkdiff %s %s" Utils.backup_xml_file Utils.conf_xml_file)); question_box ()
+      | 3 -> ignore (Sys.command (sprintf "meld %s %s" Utils.backup_xml_file Utils.conf_xml_file)); question_box ()
       | _ -> Sys.remove Utils.backup_xml_file in
     question_box ()
   end;
@@ -191,23 +190,22 @@ let () =
   gui#button_clean#misc#set_sensitive false;
   gui#button_build#misc#set_sensitive false;
 
-  AC.ac_combo_handler gui ac_combo target_combo;
-
   (* Change the buffer of the text view to attach a tag_table *)
   let background_tags =
     List.map (fun color ->
       let tag = GText.tag ~name:color () in
       tag#set_property (`BACKGROUND color);
       (color, tag))
-      ["red"; "green"; "orange"] in
+      ["red"; "green"; "orange"; "cyan"] in
   let tag_table = GText.tag_table () in
   List.iter (fun (_color, tag) -> tag_table#add tag#as_tag) background_tags;
   let buffer = GText.buffer ~tag_table () in
   gui#console#set_buffer buffer;
 
-  let errors = "red", ["error"; "no such file"; "undefined reference"; "failure"]
+  let errors = "red", ["error"; "no such file"; "undefined reference"; "failure"; "multiple definition"]
   and warnings = "orange", ["warning"]
-  and info = "green", ["pragma message"] in
+  and info = "green", ["pragma message"]
+  and version = "cyan", ["paparazzi version"] in
 
   let color_regexps =
     List.map (fun (color, strings) ->
@@ -215,7 +213,7 @@ let () =
       let s = String.concat "\\|" s in
       let s = ".*\\("^s^"\\)" in
       color, Str.regexp_case_fold s)
-      [errors; warnings; info] in
+      [errors; warnings; info; version] in
   let compute_tags = fun s ->
     let rec loop = function
 	(color, regexp)::rs ->
@@ -235,9 +233,11 @@ let () =
     let end_mark = gui#console#buffer#create_mark end_iter in
     gui#console#scroll_mark_onscreen (`MARK end_mark) in
 
+  AC.ac_combo_handler gui ac_combo target_combo log;
+
   AC.build_handler ~file gui ac_combo target_combo log;
 
-  let session_combo, execute_session = CP.supervision ~file gui log ac_combo in
+  let session_combo, execute_session = CP.supervision ~file gui log ac_combo target_combo in
 
   (* Quit button *)
   ignore (gui#menu_item_quit#connect#activate ~callback:(quit_button_callback gui ac_combo session_combo target_combo));
@@ -257,6 +257,11 @@ let () =
   let callback = fun () ->
     ignore (GToolbox.message_box ~title:"About Paparazzi Center" ~icon:(GMisc.image ~pixbuf:paparazzi_pixbuf ())#coerce "Copyright (C) 2007-2008 ENAC, Pascal Brisset\nhttp://paparazzi.enac.fr") in
   ignore (gui#menu_item_about#connect#activate ~callback);
+
+  (* Help/Get Help menu entry *)
+  let callback = fun () ->
+    ignore (GToolbox.message_box ~title:"Getting Help with Paparazzi" ~icon:(GMisc.image ~pixbuf:paparazzi_pixbuf ())#coerce "The primary documentation for Paparazzi is on the wiki:\nhttp://paparazzi.enac.fr\n\nCommunity-based support is through the paparazzi-devel mailing list:\nhttp://paparazzi.enac.fr/wiki/Contact\n\nThe Paparazzi auto-generated developer documentation is found on GitHub:\nhttp://paparazzi.github.io/docs/\n\nThe Paparazzi sourcecode can be found on GitHub:\nhttps://github.com/paparazzi/paparazzi\n\nIf you think you have found a bug or would like to make a feature request, feel\nfree to visit the Issues page found on GitHub (link found on the above webpage).") in
+  ignore (gui#menu_item_get_help#connect#activate ~callback);
 
   (* Read preferences *)
   if Sys.file_exists Env.gconf_file then begin

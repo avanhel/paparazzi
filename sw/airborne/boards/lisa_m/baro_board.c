@@ -1,140 +1,83 @@
+/*
+ * Copyright (C) 2013 Felix Ruess <felix.ruess@gmail.com>
+ *
+ * This file is part of paparazzi.
+ *
+ * paparazzi is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2, or (at your option)
+ * any later version.
+ *
+ * paparazzi is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with paparazzi; see the file COPYING.  If not, write to
+ * the Free Software Foundation, 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
+
+/** @file boards/lisa_m/baro_board.c
+ *  Baro board interface for Bosch BMP085 on LisaM I2C2 with EOC check.
+ */
+
+#include "std.h"
 
 #include "subsystems/sensors/baro.h"
-#include <libopencm3/stm32/f1/gpio.h>
+#include "peripherals/bmp085.h"
+#include "peripherals/bmp085_regs.h"
+#include <libopencm3/stm32/gpio.h>
+#include "subsystems/abi.h"
 
-struct Baro baro;
-struct BaroBoard baro_board;
-struct i2c_transaction baro_trans;
-struct bmp085_baro_calibration calibration;
+#include "led.h"
 
-#define BMP085_SAMPLE_PERIOD_MS (3 + (2 << BMP085_OSS) * 3)
-#define BMP085_SAMPLE_PERIOD (BMP075_SAMPLE_PERIOD_MS >> 1)
 
-// FIXME: BARO DRDY connected to PB0 for lisa/m
+struct Bmp085 baro_bmp085;
 
-static inline void bmp085_write_reg(uint8_t addr, uint8_t value)
-{
-  baro_trans.buf[0] = addr;
-  baro_trans.buf[1] = value;
-
-  I2CTransmit(i2c2, baro_trans, BMP085_ADDR, 2);
-
-  // FIXME, no while loops without timeout!!
-  while (baro_trans.status == I2CTransPending || baro_trans.status == I2CTransRunning);
-}
-
-static inline void bmp085_read_reg16(uint8_t addr)
-{
-  baro_trans.buf[0] = addr;
-  I2CTransceive(i2c2, baro_trans, BMP085_ADDR, 1, 2);
-}
-
-static inline int16_t bmp085_read_reg16_blocking(uint8_t addr)
-{
-  bmp085_read_reg16(addr);
-
-  while (baro_trans.status == I2CTransPending || baro_trans.status == I2CTransRunning);
-
-  return ((baro_trans.buf[0] << 8) | baro_trans.buf[1]);
-}
-
-static inline void bmp085_read_reg24(uint8_t addr)
-{
-  baro_trans.buf[0] = addr;
-  I2CTransceive(i2c2, baro_trans, BMP085_ADDR, 1, 3);
-}
-
-static void bmp085_baro_read_calibration(void)
-{
-  calibration.ac1 = bmp085_read_reg16_blocking(0xAA); // AC1
-  calibration.ac2 = bmp085_read_reg16_blocking(0xAC); // AC2
-  calibration.ac3 = bmp085_read_reg16_blocking(0xAE); // AC3
-  calibration.ac4 = bmp085_read_reg16_blocking(0xB0); // AC4
-  calibration.ac5 = bmp085_read_reg16_blocking(0xB2); // AC5
-  calibration.ac6 = bmp085_read_reg16_blocking(0xB4); // AC6
-  calibration.b1 = bmp085_read_reg16_blocking(0xB6); // B1
-  calibration.b2 = bmp085_read_reg16_blocking(0xB8); // B2
-  calibration.mb = bmp085_read_reg16_blocking(0xBA); // MB
-  calibration.mc = bmp085_read_reg16_blocking(0xBC); // MC
-  calibration.md = bmp085_read_reg16_blocking(0xBE); // MD
-}
-
-void baro_init(void) {
-  baro.status = BS_UNINITIALIZED;
-  baro.absolute     = 0;
-  baro.differential = 0;
-  baro_board.status = LBS_UNINITIALIZED;
-  bmp085_baro_read_calibration();
-
-  /* STM32 specific (maybe this is a LISA/M specific driver anyway?) */
-  gpio_clear(GPIOB, GPIO0);
-  gpio_set_mode(GPIOB, GPIO_MODE_INPUT,
-	        GPIO_CNF_INPUT_PULL_UPDOWN, GPIO0);
-}
-
-static inline int baro_eoc(void)
+static bool_t baro_eoc(void)
 {
   return gpio_get(GPIOB, GPIO0);
 }
 
-static inline void bmp085_request_pressure(void)
-{
-  bmp085_write_reg(0xF4, 0x34 + (BMP085_OSS << 6));
+void baro_init(void) {
+  bmp085_init(&baro_bmp085, &i2c2, BMP085_SLAVE_ADDR);
+
+  /* setup eoc check function */
+  baro_bmp085.eoc = &baro_eoc;
+
+  gpio_clear(GPIOB, GPIO0);
+  gpio_set_mode(GPIOB, GPIO_MODE_INPUT,
+	        GPIO_CNF_INPUT_PULL_UPDOWN, GPIO0);
+
+#ifdef BARO_LED
+  LED_OFF(BARO_LED);
+#endif
 }
 
-static inline void bmp085_request_temp(void)
-{
-  bmp085_write_reg(0xF4, 0x2E);
-}
-
-static inline void bmp085_read_pressure(void)
-{
-  bmp085_read_reg24(0xF6);
-}
-
-static inline void bmp085_read_temp(void)
-{
-  bmp085_read_reg16(0xF6);
-}
 
 void baro_periodic(void) {
-  // check that nothing is in progress
-  if (baro_trans.status == I2CTransPending) return;
-  if (baro_trans.status == I2CTransRunning) return;
-  if (!i2c_idle(&i2c2)) return;
-
-  switch (baro_board.status) {
-  case LBS_UNINITIALIZED:
-    baro_board_send_reset();
-    baro_board.status = LBS_REQUEST;
-    baro.status = BS_RUNNING;
-    break;
-  case LBS_REQUEST:
-    bmp085_request_pressure();
-    baro_board.status = LBS_READ;
-    break;
-  case LBS_READ:
-    if (baro_eoc()) {
-      bmp085_read_pressure();
-      baro_board.status = LBS_READING;
-    }
-    break;
-  case LBS_REQUEST_TEMP:
-    bmp085_request_temp();
-    baro_board.status = LBS_READ_TEMP;
-    break;
-  case LBS_READ_TEMP:
-    if (baro_eoc()) {
-      bmp085_read_temp();
-      baro_board.status = LBS_READING_TEMP;
-    }
-    break;
-  default:
-    break;
+  if (baro_bmp085.initialized) {
+    bmp085_periodic(&baro_bmp085);
   }
-
+  else {
+    bmp085_read_eeprom_calib(&baro_bmp085);
+  }
 }
 
-void baro_board_send_reset(void) {
-  // This is a NOP at the moment
+
+
+void baro_event(void)
+{
+  bmp085_event(&baro_bmp085);
+
+  if (baro_bmp085.data_available) {
+    float pressure = (float)baro_bmp085.pressure;
+    AbiSendMsgBARO_ABS(BARO_BOARD_SENDER_ID, &pressure);
+    baro_bmp085.data_available = FALSE;
+#ifdef BARO_LED
+    RunOnceEvery(10,LED_TOGGLE(BARO_LED));
+#endif
+  }
 }

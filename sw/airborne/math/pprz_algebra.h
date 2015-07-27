@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2008  Antoine Drouin
  *
  * This file is part of paparazzi.
@@ -30,6 +28,13 @@
 #include "std.h" /* for ABS */
 
 #define SQUARE(_a) ((_a)*(_a))
+
+//
+//
+// Vector algebra
+//
+//
+
 
 /*
  * Dimension 2 vectors
@@ -89,7 +94,10 @@
     (_v).y = (_v).y < _min ? _min : (_v).y > _max ? _max : (_v).y;	\
   }
 
-
+/* _vo=v1*v2 */
+#define VECT2_DOT_PRODUCT(_so, _v1, _v2) {                        \
+    (_so) = (_v1).x*(_v2).x + (_v1).y*(_v2).y + (_v1).z*(_v2).z;  \
+}
 
 /*
  * Dimension 3 vectors
@@ -101,6 +109,14 @@
     (_a).y = (_y);				\
     (_a).z = (_z);				\
   }
+
+/* a = a * b */
+
+#define VECT3_MUL( _v1, _v2){ \
+	(_v1).x = (_v1).x * (_v2).x; \
+	(_v1).y = (_v1).y * (_v2).y; \
+	(_v1).z = (_v1).z * (_v2).z; \
+}
 
 /* a =  {abs(x), abs(y), abs(z)} */
 #define VECT3_ASSIGN_ABS(_a, _x, _y, _z) {      \
@@ -220,6 +236,10 @@
     (_vo).z = (_v1).x*(_v2).y - (_v1).y*(_v2).x;    \
   }
 
+#define VECT3_DOT_PRODUCT(_so, _v1, _v2) {                        \
+    (_so) = (_v1).x*(_v2).x + (_v1).y*(_v2).y + (_v1).z*(_v2).z;  \
+}
+
 #define VECT3_RATES_CROSS_VECT3(_vo, _r1, _v2) {    \
     (_vo).x = (_r1).q*(_v2).z - (_r1).r*(_v2).y;    \
     (_vo).y = (_r1).r*(_v2).x - (_r1).p*(_v2).z;    \
@@ -227,11 +247,12 @@
   }
 
 
+//
+//
+// Euler angles
+//
+//
 
-
-/*
- * Euler angles
- */
 
 #define EULERS_COPY(_a, _b) {				\
     (_a).phi   = (_b).phi;				\
@@ -288,9 +309,11 @@
     (_v).psi   = (_v).psi   < (_min) ? (_min) : (_v).psi   > (_max) ? (_max) : (_v).psi;   \
   }
 
-/*
- * Rates
- */
+//
+//
+// Rates
+//
+//
 
 /* ra =  {p, q, r} */
 #define RATES_ASSIGN(_ra, _p, _q, _r) {		\
@@ -378,6 +401,13 @@
 
 
 
+//
+//
+// Matrix
+//
+//
+
+
 /*
  * 3x3 matrices
  */
@@ -458,9 +488,11 @@
 
 //
 //
-// Quaternions
+// Quaternion algebras
 //
 //
+
+/* _q = [_i _x _y _z] */
 #define QUAT_ASSIGN(_q, _i, _x, _y, _z) {   \
     (_q).qi = (_i);			    \
     (_q).qx = (_x);			    \
@@ -468,6 +500,7 @@
     (_q).qz = (_z);			    \
   }
 
+/* _qc = _qa - _qc */
 #define QUAT_DIFF(_qc, _qa, _qb) {	    \
     (_qc).qi = (_qa).qi - (_qb).qi;	    \
     (_qc).qx = (_qa).qx - (_qb).qx;	    \
@@ -475,6 +508,7 @@
     (_qc).qz = (_qa).qz - (_qb).qz;	    \
   }
 
+/* _qo = _qi */
 #define QUAT_COPY(_qo, _qi) {	    \
     (_qo).qi = (_qi).qi;		    \
     (_qo).qx = (_qi).qx;		    \
@@ -489,7 +523,7 @@
     (b).qz = -(a).qz;               \
   }
 
-
+/* _qo = _qi * _s */
 #define QUAT_SMUL(_qo, _qi, _s) {	    \
     (_qo).qi = (_qi).qi * (_s);		    \
     (_qo).qx = (_qi).qx * (_s);		    \
@@ -497,6 +531,7 @@
     (_qo).qz = (_qi).qz * (_s);		    \
   }
 
+/* _qo = _qo + _qi */
 #define QUAT_ADD(_qo, _qi) {		    \
     (_qo).qi += (_qi).qi;		    \
     (_qo).qx += (_qi).qx;		    \
@@ -504,6 +539,7 @@
     (_qo).qz += (_qi).qz;		    \
   }
 
+/* _qo = [qi -qx -qy -qz] */
 #define QUAT_INVERT(_qo, _qi) {		    \
     (_qo).qi =  (_qi).qi;		    \
     (_qo).qx = -(_qi).qx;		    \
@@ -511,10 +547,27 @@
     (_qo).qz = -(_qi).qz;		    \
   }
 
+/* _vo=[ qx qy qz] */
+#define QUAT_EXTRACT_Q(_vo, _qi) {  \
+  (_vo).x=(_qi).qx;                 \
+  (_vo).y=(_qi).qy;                 \
+  (_vo).z=(_qi).qz;                 \
+}
 
-/*
- * Rotation Matrices
- */
+/* _qo = _qo / _s */
+#define QUAT_SDIV(_qo, _qi, _s) { \
+    (_qo).qi = (_qi).qi / _s; \
+    (_qo).qx = (_qi).qx / _s; \
+    (_qo).qy = (_qi).qy / _s; \
+    (_qo).qz = (_qi).qz / _s; \
+  }
+
+//
+//
+// Rotation Matrices
+//
+//
+
 
 /* accessor : row and col range from 0 to 2 */
 #define RMAT_ELMT(_rm, _row, _col) MAT33_ELMT(_rm, _row, _col)
@@ -626,6 +679,30 @@
     (_ri).p = RATE_BFP_OF_REAL((_rf).p);		\
     (_ri).q = RATE_BFP_OF_REAL((_rf).q);		\
     (_ri).r = RATE_BFP_OF_REAL((_rf).r);		\
+  }
+
+#define POSITIONS_FLOAT_OF_BFP(_ef, _ei) {      \
+    (_ef).x = POS_FLOAT_OF_BFP((_ei).x);		\
+    (_ef).y = POS_FLOAT_OF_BFP((_ei).y);		\
+    (_ef).z = POS_FLOAT_OF_BFP((_ei).z);		\
+  }
+
+#define POSITIONS_BFP_OF_REAL(_ef, _ei) {	\
+    (_ef).x = POS_BFP_OF_REAL((_ei).x);		\
+    (_ef).y = POS_BFP_OF_REAL((_ei).y);		\
+    (_ef).z = POS_BFP_OF_REAL((_ei).z);		\
+  }
+
+#define SPEEDS_FLOAT_OF_BFP(_ef, _ei) {			\
+    (_ef).x = SPEED_FLOAT_OF_BFP((_ei).x);		\
+    (_ef).y = SPEED_FLOAT_OF_BFP((_ei).y);		\
+    (_ef).z = SPEED_FLOAT_OF_BFP((_ei).z);		\
+  }
+
+#define SPEEDS_BFP_OF_REAL(_ef, _ei) {			\
+    (_ef).x = SPEED_BFP_OF_REAL((_ei).x);		\
+    (_ef).y = SPEED_BFP_OF_REAL((_ei).y);		\
+    (_ef).z = SPEED_BFP_OF_REAL((_ei).z);		\
   }
 
 #define ACCELS_FLOAT_OF_BFP(_ef, _ei) {			\

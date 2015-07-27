@@ -19,6 +19,13 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file subsystems/ahrs/ahrs_sim.h
+ *
+ * Interface to set the AHRS from the simple OCaml simulator.
+ *
+ */
+
 #ifndef AHRS_SIM_H
 #define AHRS_SIM_H
 
@@ -28,9 +35,6 @@
 extern bool_t ahrs_sim_available;
 
 #ifdef AHRS_UPDATE_FW_ESTIMATOR
-#include "estimator.h"
-// TODO copy ahrs to state instead of estimator
-void ahrs_update_fw_estimator(void);
 extern float ins_roll_neutral;
 extern float ins_pitch_neutral;
 #endif

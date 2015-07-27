@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2003-2005  Pascal Brisset, Antoine Drouin
  *
  * This file is part of paparazzi.
@@ -19,10 +17,11 @@
  * along with paparazzi; see the file COPYING.  If not, write to
  * the Free Software Foundation, 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
- *
  */
-/** \file subsystems/nav.c
- *  \brief Regroup functions to compute navigation
+
+/**
+ * @file subsystems/nav.c
+ * Fixedwing functions to compute navigation.
  *
  */
 
@@ -32,7 +31,6 @@
 
 #include "subsystems/nav.h"
 #include "subsystems/gps.h"
-#include "estimator.h"
 #include "firmwares/fixedwing/stabilization/stabilization_attitude.h"
 #include "firmwares/fixedwing/autopilot.h"
 #include "inter_mcu.h"
@@ -52,6 +50,7 @@ float carrot_x, carrot_y;
 
 /** Status on the current circle */
 float nav_circle_radians; /* Cumulated */
+float nav_circle_radians_no_rewind; /* Cumulated */
 float nav_circle_trigo_qdr; /* Angle from center to mobile */
 float nav_radius, nav_course, nav_climb, nav_shift;
 
@@ -89,9 +88,11 @@ bool_t nav_survey_active;
 int nav_mode;
 
 void nav_init_stage( void ) {
-  last_x = estimator_x; last_y = estimator_y;
+  last_x = stateGetPositionEnu_f()->x;
+  last_y = stateGetPositionEnu_f()->y;
   stage_time = 0;
   nav_circle_radians = 0;
+  nav_circle_radians_no_rewind = 0;
   nav_in_circle = FALSE;
   nav_in_segment = FALSE;
   nav_shift = 0;
@@ -106,18 +107,22 @@ void nav_init_stage( void ) {
 
 /** Navigates around (x, y). Clockwise iff radius > 0 */
 void nav_circle_XY(float x, float y, float radius) {
+  struct EnuCoor_f* pos = stateGetPositionEnu_f();
   float last_trigo_qdr = nav_circle_trigo_qdr;
-  nav_circle_trigo_qdr = atan2(estimator_y - y, estimator_x - x);
+  nav_circle_trigo_qdr = atan2(pos->y - y, pos->x - x);
+  float sign_radius = radius > 0 ? 1 : -1;
 
   if (nav_in_circle) {
     float trigo_diff = nav_circle_trigo_qdr - last_trigo_qdr;
     NormRadAngle(trigo_diff);
     nav_circle_radians += trigo_diff;
+    trigo_diff *= - sign_radius;
+    if (trigo_diff > 0) // do not rewind if the change in angle is in the opposite sense than nav_radius
+      nav_circle_radians_no_rewind += trigo_diff;
   }
 
-  float dist2_center = DistanceSquare(estimator_x, estimator_y, x, y);
+  float dist2_center = DistanceSquare(pos->x, pos->y, x, y);
   float dist_carrot = CARROT*NOMINAL_AIRSPEED;
-  float sign_radius = radius > 0 ? 1 : -1;
 
   radius += -nav_shift;
 
@@ -126,9 +131,9 @@ void nav_circle_XY(float x, float y, float radius) {
   /** Computes a prebank. Go straight if inside or outside the circle */
   circle_bank =
     (dist2_center > Square(abs_radius + dist_carrot)
-      || dist2_center < Square(abs_radius - dist_carrot)) ?
+     || dist2_center < Square(abs_radius - dist_carrot)) ?
     0 :
-    atan(estimator_hspeed_mod*estimator_hspeed_mod / (G*radius));
+    atan((*stateGetHorizontalSpeedNorm_f())*(*stateGetHorizontalSpeedNorm_f()) / (NAV_GRAVITY*radius));
 
   float carrot_angle = dist_carrot / abs_radius;
   carrot_angle = Min(carrot_angle, M_PI/4);
@@ -136,10 +141,11 @@ void nav_circle_XY(float x, float y, float radius) {
   float alpha_carrot = nav_circle_trigo_qdr - sign_radius * carrot_angle;
   horizontal_mode = HORIZONTAL_MODE_CIRCLE;
   float radius_carrot = abs_radius;
-  if (nav_mode == NAV_MODE_COURSE)
+  if (nav_mode == NAV_MODE_COURSE) {
     radius_carrot += (abs_radius / cos(carrot_angle) - abs_radius);
+  }
   fly_to_xy(x+cos(alpha_carrot)*radius_carrot,
-	    y+sin(alpha_carrot)*radius_carrot);
+            y+sin(alpha_carrot)*radius_carrot);
   nav_in_circle = TRUE;
   nav_circle_x = x;
   nav_circle_y = y;
@@ -147,13 +153,13 @@ void nav_circle_XY(float x, float y, float radius) {
 }
 
 
-#define NavGlide(_last_wp, _wp) { \
-  float start_alt = waypoints[_last_wp].a; \
-  float diff_alt = waypoints[_wp].a - start_alt; \
-  float alt = start_alt + nav_leg_progress * diff_alt; \
-  float pre_climb = estimator_hspeed_mod * diff_alt / nav_leg_length; \
-  NavVerticalAltitudeMode(alt, pre_climb); \
-}
+#define NavGlide(_last_wp, _wp) {                                       \
+    float start_alt = waypoints[_last_wp].a;                            \
+    float diff_alt = waypoints[_wp].a - start_alt;                      \
+    float alt = start_alt + nav_leg_progress * diff_alt;                \
+    float pre_climb = (*stateGetHorizontalSpeedNorm_f()) * diff_alt / nav_leg_length; \
+    NavVerticalAltitudeMode(alt, pre_climb);                            \
+  }
 
 
 
@@ -162,33 +168,33 @@ void nav_circle_XY(float x, float y, float radius) {
 #define MIN_HEIGHT_CARROT 50.
 #define MAX_HEIGHT_CARROT 150.
 
-#define Goto3D(radius) { \
-  if (pprz_mode == PPRZ_MODE_AUTO2) { \
-    int16_t yaw = fbw_state->channels[RADIO_YAW]; \
-    if (yaw > MIN_DX || yaw < -MIN_DX) { \
-      carrot_x += FLOAT_OF_PPRZ(yaw, 0, -20.); \
-      carrot_x = Min(carrot_x, MAX_DIST_CARROT); \
-      carrot_x = Max(carrot_x, -MAX_DIST_CARROT); \
-    } \
-    int16_t pitch = fbw_state->channels[RADIO_PITCH]; \
-    if (pitch > MIN_DX || pitch < -MIN_DX) { \
-      carrot_y += FLOAT_OF_PPRZ(pitch, 0, -20.); \
-      carrot_y = Min(carrot_y, MAX_DIST_CARROT); \
-      carrot_y = Max(carrot_y, -MAX_DIST_CARROT); \
-    } \
-    v_ctl_mode = V_CTL_MODE_AUTO_ALT; \
-    int16_t roll =  fbw_state->channels[RADIO_ROLL]; \
-    if (roll > MIN_DX || roll < -MIN_DX) { \
-      nav_altitude += FLOAT_OF_PPRZ(roll, 0, -1.0);	\
-      nav_altitude = Max(nav_altitude, MIN_HEIGHT_CARROT+ground_alt); \
-      nav_altitude = Min(nav_altitude, MAX_HEIGHT_CARROT+ground_alt); \
-    } \
-  } \
-  nav_circle_XY(carrot_x, carrot_y, radius); \
-}
+#define Goto3D(radius) {                                                \
+    if (pprz_mode == PPRZ_MODE_AUTO2) {                                 \
+      int16_t yaw = fbw_state->channels[RADIO_YAW];                     \
+      if (yaw > MIN_DX || yaw < -MIN_DX) {                              \
+        carrot_x += FLOAT_OF_PPRZ(yaw, 0, -20.);                        \
+        carrot_x = Min(carrot_x, MAX_DIST_CARROT);                      \
+        carrot_x = Max(carrot_x, -MAX_DIST_CARROT);                     \
+      }                                                                 \
+      int16_t pitch = fbw_state->channels[RADIO_PITCH];                 \
+      if (pitch > MIN_DX || pitch < -MIN_DX) {                          \
+        carrot_y += FLOAT_OF_PPRZ(pitch, 0, -20.);                      \
+        carrot_y = Min(carrot_y, MAX_DIST_CARROT);                      \
+        carrot_y = Max(carrot_y, -MAX_DIST_CARROT);                     \
+      }                                                                 \
+      v_ctl_mode = V_CTL_MODE_AUTO_ALT;                                 \
+      int16_t roll =  fbw_state->channels[RADIO_ROLL];                  \
+      if (roll > MIN_DX || roll < -MIN_DX) {                            \
+        nav_altitude += FLOAT_OF_PPRZ(roll, 0, -1.0);                   \
+        nav_altitude = Max(nav_altitude, MIN_HEIGHT_CARROT+ground_alt); \
+        nav_altitude = Min(nav_altitude, MAX_HEIGHT_CARROT+ground_alt); \
+      }                                                                 \
+    }                                                                   \
+    nav_circle_XY(carrot_x, carrot_y, radius);                          \
+  }
 
 
-#define NavFollow(_ac_id, _distance, _height) \
+#define NavFollow(_ac_id, _distance, _height)   \
   nav_follow(_ac_id, _distance, _height);
 
 
@@ -202,7 +208,7 @@ static inline void nav_follow(uint8_t _ac_id, float _distance, float _height);
 static void nav_ground_speed_loop( void ) {
   if (MINIMUM_AIRSPEED < nav_ground_speed_setpoint
       && nav_ground_speed_setpoint < MAXIMUM_AIRSPEED) {
-    float err = nav_ground_speed_setpoint - estimator_hspeed_mod;
+    float err = nav_ground_speed_setpoint - (*stateGetHorizontalSpeedNorm_f());
     v_ctl_auto_throttle_cruise_throttle += nav_ground_speed_pgain*err;
     Bound(v_ctl_auto_throttle_cruise_throttle, V_CTL_AUTO_THROTTLE_MIN_CRUISE_THROTTLE, V_CTL_AUTO_THROTTLE_MAX_CRUISE_THROTTLE);
   } else {
@@ -257,10 +263,11 @@ static inline bool_t nav_compute_final_from_glide(uint8_t wp_af, uint8_t wp_td, 
    Computes Top Of Descent waypoint from Touch Down and Approach Fix
    waypoints, using glide airspeed, glide vertical speed and wind */
 static inline bool_t compute_TOD(uint8_t _af, uint8_t _td, uint8_t _tod, float glide_airspeed, float glide_vspeed) {
+  struct FloatVect2* wind = stateGetHorizontalWindspeed_f();
   float td_af_x = WaypointX(_af) - WaypointX(_td);
   float td_af_y = WaypointY(_af) - WaypointY(_td);
   float td_af = sqrt( td_af_x*td_af_x + td_af_y*td_af_y);
-  float td_tod = (WaypointAlt(_af) - WaypointAlt(_td)) / glide_vspeed * (glide_airspeed - sqrt(wind_east*wind_east + wind_north*wind_north));
+  float td_tod = (WaypointAlt(_af) - WaypointAlt(_td)) / glide_vspeed * (glide_airspeed - sqrt(wind->x*wind->x + wind->y*wind->y));
   WaypointX(_tod) = WaypointX(_td) + td_af_x / td_af * td_tod;
   WaypointY(_tod) = WaypointY(_td) + td_af_y / td_af * td_tod;
   WaypointAlt(_tod) = WaypointAlt(_af);
@@ -290,7 +297,7 @@ static inline void nav_follow(uint8_t _ac_id, float _distance, float _height) {
   float y = ac->north - _distance*sa;
   fly_to_xy(x, y);
 #ifdef NAV_FOLLOW_PGAIN
-  float s = (estimator_x-x)*ca+(estimator_y-y)*sa;
+  float s = (stateGetPositionEnu_f()->x - x)*ca + (stateGetPositionEnu_f()->y - y)*sa;
   nav_ground_speed_setpoint = ac->gspeed + NAV_FOLLOW_PGAIN*s;
   nav_ground_speed_loop();
 #endif
@@ -311,12 +318,12 @@ float fp_pitch; /* deg */
  */
 bool_t nav_approaching_xy(float x, float y, float from_x, float from_y, float approaching_time) {
   /** distance to waypoint in x */
-  float pw_x = x - estimator_x;
+  float pw_x = x - stateGetPositionEnu_f()->x;
   /** distance to waypoint in y */
-  float pw_y = y - estimator_y;
+  float pw_y = y - stateGetPositionEnu_f()->y;
 
   dist2_to_wp = pw_x*pw_x + pw_y *pw_y;
-  float min_dist = approaching_time * estimator_hspeed_mod;
+  float min_dist = approaching_time * (*stateGetHorizontalSpeedNorm_f());
   if (dist2_to_wp < min_dist*min_dist)
     return TRUE;
 
@@ -331,19 +338,21 @@ bool_t nav_approaching_xy(float x, float y, float from_x, float from_y, float ap
  */
 //static inline void fly_to_xy(float x, float y) {
 void fly_to_xy(float x, float y) {
+  struct EnuCoor_f* pos = stateGetPositionEnu_f();
   desired_x = x;
   desired_y = y;
   if (nav_mode == NAV_MODE_COURSE) {
-    h_ctl_course_setpoint = atan2(x - estimator_x, y - estimator_y);
+    h_ctl_course_setpoint = atan2(x - pos->x, y - pos->y);
     if (h_ctl_course_setpoint < 0.)
       h_ctl_course_setpoint += 2 * M_PI;
     lateral_mode = LATERAL_MODE_COURSE;
   } else {
-    float diff = atan2(x - estimator_x, y - estimator_y) - estimator_hspeed_dir;
+    float diff = atan2(x - pos->x, y - pos->y) - (*stateGetHorizontalSpeedDir_f());
     NormRadAngle(diff);
     BoundAbs(diff,M_PI/2.);
     float s = sin(diff);
-    h_ctl_roll_setpoint = atan(2 * estimator_hspeed_mod*estimator_hspeed_mod * s * h_ctl_course_pgain / (CARROT * NOMINAL_AIRSPEED * 9.81) );
+    float speed = *stateGetHorizontalSpeedNorm_f();
+    h_ctl_roll_setpoint = atan(2 * speed * speed * s * h_ctl_course_pgain / (CARROT * NOMINAL_AIRSPEED * 9.81) );
     BoundAbs(h_ctl_roll_setpoint, h_ctl_roll_max_setpoint);
     lateral_mode = LATERAL_MODE_ROLL;
   }
@@ -356,7 +365,7 @@ void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_y) {
   float leg_x = wp_x - last_wp_x;
   float leg_y = wp_y - last_wp_y;
   float leg2 = Max(leg_x * leg_x + leg_y * leg_y, 1.);
-  nav_leg_progress = ((estimator_x - last_wp_x) * leg_x + (estimator_y - last_wp_y) * leg_y) / leg2;
+  nav_leg_progress = ((stateGetPositionEnu_f()->x - last_wp_x) * leg_x + (stateGetPositionEnu_f()->y - last_wp_y) * leg_y) / leg2;
   nav_leg_length = sqrt(leg2);
 
   /** distance of carrot (in meter) */
@@ -394,7 +403,7 @@ void nav_home(void) {
   /** Nominal speed */
   nav_pitch = 0.;
   v_ctl_mode = V_CTL_MODE_AUTO_ALT;
-  nav_altitude = ground_alt+SECURITY_HEIGHT;
+  nav_altitude = ground_alt+HOME_MODE_HEIGHT;
   compute_dist2_to_home();
   dist2_to_wp = dist2_to_home;
   nav_set_altitude();
@@ -422,6 +431,48 @@ void nav_periodic_task(void) {
   nav_set_altitude();
 }
 
+/**
+ * \brief Periodic telemetry
+ */
+#if DOWNLINK
+#include "subsystems/datalink/telemetry.h"
+
+static void send_nav_ref(void) {
+  DOWNLINK_SEND_NAVIGATION_REF(DefaultChannel, DefaultDevice,
+      &nav_utm_east0, &nav_utm_north0, &nav_utm_zone0);
+}
+
+static void send_nav(void) {
+  SEND_NAVIGATION(DefaultChannel, DefaultDevice);
+}
+
+static void send_wp_moved(void) {
+  static uint8_t i;
+  i++; if (i >= nb_waypoint) i = 0;
+  DownlinkSendWp(DefaultChannel, DefaultDevice, i);
+}
+
+static void send_circle(void) {
+  if (nav_in_circle) {
+    DOWNLINK_SEND_CIRCLE(DefaultChannel, DefaultDevice,
+        &nav_circle_x, &nav_circle_y, &nav_circle_radius);
+  }
+}
+
+static void send_segment(void) {
+  if (nav_in_segment) {
+    DOWNLINK_SEND_SEGMENT(DefaultChannel, DefaultDevice,
+        &nav_segment_x_1, &nav_segment_y_1, &nav_segment_x_2, &nav_segment_y_2);
+  }
+}
+
+static void send_survey(void) {
+  if (nav_survey_active) {
+    DOWNLINK_SEND_SURVEY(DefaultChannel, DefaultDevice,
+        &nav_survey_east, &nav_survey_north, &nav_survey_west, &nav_survey_south);
+  }
+}
+#endif
 
 /**
  *  \brief Navigation Initialisation
@@ -438,6 +489,15 @@ void nav_init(void) {
 #ifdef NAV_GROUND_SPEED_PGAIN
   nav_ground_speed_pgain = ABS(NAV_GROUND_SPEED_PGAIN);
   nav_ground_speed_setpoint = NOMINAL_AIRSPEED;
+#endif
+
+#if DOWNLINK
+  register_periodic_telemetry(DefaultPeriodic, "NAVIGATION_REF", send_nav_ref);
+  register_periodic_telemetry(DefaultPeriodic, "NAVIGATION", send_nav);
+  register_periodic_telemetry(DefaultPeriodic, "WP_MOVED", send_wp_moved);
+  register_periodic_telemetry(DefaultPeriodic, "CIRCLE", send_circle);
+  register_periodic_telemetry(DefaultPeriodic, "SEGMENT", send_segment);
+  register_periodic_telemetry(DefaultPeriodic, "SURVEY", send_survey);
 #endif
 }
 
@@ -618,18 +678,18 @@ void nav_oval(uint8_t p1, uint8_t p2, float radius) {
 
   /* The half circle centers and the other leg */
   struct point p1_center = { waypoints[p1].x + radius * -u_y,
-			     waypoints[p1].y + radius * u_x,
-			     alt  };
+                             waypoints[p1].y + radius * u_x,
+                             alt  };
   struct point p1_out = { waypoints[p1].x + 2*radius * -u_y,
-			  waypoints[p1].y + 2*radius * u_x,
-			  alt  };
+                          waypoints[p1].y + 2*radius * u_x,
+                          alt  };
 
   struct point p2_in = { waypoints[p2].x + 2*radius * -u_y,
-			 waypoints[p2].y + 2*radius * u_x,
-			 alt  };
+                         waypoints[p2].y + 2*radius * u_x,
+                         alt  };
   struct point p2_center = { waypoints[p2].x + radius * -u_y,
-			     waypoints[p2].y + radius * u_x,
-			     alt  };
+                             waypoints[p2].y + radius * u_x,
+                             alt  };
 
   float qdr_out_2 = M_PI - atan2(u_y, u_x);
   float qdr_out_1 = qdr_out_2 + M_PI;
@@ -666,7 +726,7 @@ void nav_oval(uint8_t p1, uint8_t p2, float radius) {
       InitStage();
       LINE_START_FUNCTION;
     }
-   return;
+    return;
 
   case OR21:
     nav_route_xy(waypoints[p2].x, waypoints[p2].y, waypoints[p1].x, waypoints[p1].y);
@@ -677,7 +737,7 @@ void nav_oval(uint8_t p1, uint8_t p2, float radius) {
     }
     return;
 
- default: /* Should not occur !!! Doing nothing */
-   return;
+  default: /* Should not occur !!! Doing nothing */
+    return;
   }
 }

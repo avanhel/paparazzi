@@ -24,24 +24,16 @@
 CFG_SHARED=$(PAPARAZZI_SRC)/conf/firmwares/subsystems/shared
 CFG_ROTORCRAFT=$(PAPARAZZI_SRC)/conf/firmwares/subsystems/rotorcraft
 
-SRC_BOOZ_TEST=$(SRC_BOOZ)/test
-SRC_BOOZ_PRIV=booz_priv
-
 SRC_BOARD=boards/$(BOARD)
 SRC_FIRMWARE=firmwares/rotorcraft
 SRC_SUBSYSTEMS=subsystems
 
 SRC_ARCH=arch/$(ARCH)
 
-CFG_BOOZ=$(PAPARAZZI_SRC)/conf/firmwares/
-
 ROTORCRAFT_INC = -I$(SRC_FIRMWARE) -I$(SRC_BOARD)
 
 
 ap.ARCHDIR = $(ARCH)
-
-# would be better to auto-generate this
-$(TARGET).CFLAGS 	+= -DFIRMWARE=ROTORCRAFT
 
 ap.CFLAGS += $(ROTORCRAFT_INC)
 ap.CFLAGS += -DBOARD_CONFIG=$(BOARD_CFG) -DPERIPHERALS_AUTO_INIT
@@ -52,7 +44,7 @@ ap.srcs   += $(SRC_ARCH)/mcu_arch.c
 #
 # Math functions
 #
-ap.srcs += math/pprz_geodetic_int.c math/pprz_geodetic_float.c math/pprz_geodetic_double.c math/pprz_trig_int.c
+ap.srcs += math/pprz_geodetic_int.c math/pprz_geodetic_float.c math/pprz_geodetic_double.c math/pprz_trig_int.c math/pprz_orientation_conversion.c
 
 ifeq ($(ARCH), stm32)
 ap.srcs += lisa/plug_sys.c
@@ -64,6 +56,10 @@ ifeq ($(ARCH), lpc21)
 ap.srcs += $(SRC_ARCH)/armVIC.c
 endif
 
+ifeq ($(ARCH), stm32)
+ap.srcs += $(SRC_ARCH)/mcu_periph/gpio_arch.c
+endif
+
 #
 # LEDs
 #
@@ -72,11 +68,14 @@ ifeq ($(ARCH), stm32)
 ap.srcs += $(SRC_ARCH)/led_hw.c
 endif
 
-# frequency of main periodic
-ifndef PERIODIC_FREQUENCY
-PERIODIC_FREQUENCY = 512
+ifeq ($(BOARD)$(BOARD_TYPE), ardroneraw)
+ap.srcs   += $(SRC_BOARD)/gpio_ardrone.c
 endif
+
+# frequency of main periodic
+PERIODIC_FREQUENCY ?= 512
 ap.CFLAGS += -DPERIODIC_FREQUENCY=$(PERIODIC_FREQUENCY)
+
 #
 # Systime
 #
@@ -98,13 +97,18 @@ ap.srcs += $(SRC_ARCH)/subsystems/settings_arch.c
 
 ap.srcs += mcu_periph/uart.c
 ap.srcs += $(SRC_ARCH)/mcu_periph/uart_arch.c
+ifeq ($(ARCH), omap)
+ap.srcs   += $(SRC_ARCH)/serial_port.c
+endif
 
 # I2C is needed for speed controllers and barometers on lisa
 ifeq ($(TARGET), ap)
-  include $(CFG_SHARED)/i2c_select.makefile
+$(TARGET).srcs += mcu_periph/i2c.c
+$(TARGET).srcs += $(SRC_ARCH)/mcu_periph/i2c_arch.c
 endif
 
-ap.srcs += $(SRC_FIRMWARE)/commands.c
+ap.srcs += subsystems/commands.c
+ap.srcs += subsystems/actuators.c
 
 #
 # Radio control choice
@@ -135,33 +139,17 @@ ap.srcs += $(SRC_FIRMWARE)/commands.c
 #
 
 #
-# BARO
+# AIR DATA and BARO (if needed)
 #
-ap.srcs += $(SRC_BOARD)/baro_board.c
-ifeq ($(BOARD), booz)
-else ifeq ($(BOARD), lisa_l)
-ap.CFLAGS += -DUSE_I2C2
-else ifeq ($(BOARD), lisa_m)
-ap.CFLAGS += -DUSE_I2C2
-else ifeq ($(BOARD), navgo)
-ap.CFLAGS += -DUSE_SPI
-ap.CFLAGS += -DUSE_SPI_SLAVE0
-ap.CFLAGS += -DSPI_NO_UNSELECT_SLAVE
-ap.CFLAGS += -DSPI_MASTER
-ap.srcs += mcu_periph/spi.c $(SRC_ARCH)/mcu_periph/spi_arch.c
-ap.srcs += peripherals/mcp355x.c
-endif
-ifneq ($(BARO_LED),none)
-ap.CFLAGS += -DROTORCRAFT_BARO_LED=$(BARO_LED)
-endif
+ap.srcs += subsystems/air_data.c
+
+include $(CFG_SHARED)/baro_board.makefile
 
 #
 # Analog Backend
 #
 
 ifeq ($(ARCH), lpc21)
-ap.CFLAGS += -DADC0_VIC_SLOT=2
-ap.CFLAGS += -DADC1_VIC_SLOT=3
 ap.CFLAGS += -DUSE_ADC
 ap.srcs   += $(SRC_ARCH)/mcu_periph/adc_arch.c
 ap.srcs   += subsystems/electrical.c
@@ -172,9 +160,12 @@ ap.srcs   += $(SRC_ARCH)/mcu_periph/dac_arch.c
 endif
 else ifeq ($(ARCH), stm32)
 ap.CFLAGS += -DUSE_ADC
-ap.CFLAGS += -DUSE_AD1 -DUSE_AD1_1 -DUSE_AD1_2 -DUSE_AD1_3 -DUSE_AD1_4
 ap.srcs   += $(SRC_ARCH)/mcu_periph/adc_arch.c
 ap.srcs   += subsystems/electrical.c
+else ifeq ($(BOARD)$(BOARD_TYPE), ardronesdk)
+ap.srcs   += $(SRC_BOARD)/electrical_dummy.c
+else ifeq ($(BOARD)$(BOARD_TYPE), ardroneraw)
+ap.srcs   += $(SRC_BOARD)/electrical_raw.c
 endif
 
 
@@ -200,13 +191,18 @@ endif
 
 ap.srcs += $(SRC_FIRMWARE)/autopilot.c
 
+ap.srcs += state.c
+
 ap.srcs += $(SRC_FIRMWARE)/stabilization.c
 ap.srcs += $(SRC_FIRMWARE)/stabilization/stabilization_none.c
 ap.srcs += $(SRC_FIRMWARE)/stabilization/stabilization_rate.c
 
 ap.CFLAGS += -DUSE_NAVIGATION
 ap.srcs += $(SRC_FIRMWARE)/guidance/guidance_h.c
+ap.srcs += $(SRC_FIRMWARE)/guidance/guidance_h_ref.c
 ap.srcs += $(SRC_FIRMWARE)/guidance/guidance_v.c
+ap.srcs += $(SRC_FIRMWARE)/guidance/guidance_v_ref.c
+ap.srcs += $(SRC_FIRMWARE)/guidance/guidance_v_adapt.c
 
 #
 # INS choice
@@ -222,12 +218,3 @@ ap.srcs += $(SRC_FIRMWARE)/guidance/guidance_v.c
 ap.srcs += $(SRC_FIRMWARE)/navigation.c
 ap.srcs += subsystems/navigation/common_flight_plan.c
 
-#
-# FMS  choice
-#
-# include booz2_fms_test_signal.makefile
-# or
-# include booz2_fms_datalink.makefile
-# or
-# nothing
-#

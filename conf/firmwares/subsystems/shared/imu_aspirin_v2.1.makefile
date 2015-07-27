@@ -36,32 +36,7 @@
 #
 #
 
+include $(CFG_SHARED)/imu_aspirin_v2_common.makefile
 
-IMU_ASPIRIN_CFLAGS  = -DUSE_IMU
-IMU_ASPIRIN_CFLAGS += -DIMU_TYPE_H=\"imu/imu_aspirin2.h\" -DIMU_OVERRIDE_CHANNELS
-IMU_ASPIRIN_SRCS    = $(SRC_SUBSYSTEMS)/imu.c             \
-                      $(SRC_SUBSYSTEMS)/imu/imu_aspirin2.c \
-                      $(SRC_ARCH)/mcu_periph/spi_arch.c \
-                      mcu_periph/spi.c
-
-IMU_ASPIRIN_CFLAGS += -DUSE_SPI
-
-ifeq ($(ARCH), lpc21)
-#TODO
-$(error Not implemented for the LCP21x yet. Needs the new SPI mcu_periph. See issue 147!)
-else ifeq ($(ARCH), stm32)
-IMU_ASPIRIN_CFLAGS += -DUSE_DMA1_C4_IRQ    # SPI2 Rx DMA
-endif
-
-IMU_ASPIRIN_CFLAGS += -DIMU_ASPIRIN_VERSION_2_1
-
-# Keep CFLAGS/Srcs for imu in separate expression so we can assign it to other targets
-# see: conf/autopilot/subsystems/lisa_passthrough/imu_b2_v1.1.makefile for example
-
-ap.CFLAGS += $(IMU_ASPIRIN_CFLAGS)
-ap.srcs   += $(IMU_ASPIRIN_SRCS)
-
-#
-# NPS simulator
-#
-include $(CFG_SHARED)/imu_nps.makefile
+ap.CFLAGS += $(IMU_ASPIRIN_2_CFLAGS)
+ap.srcs   += $(IMU_ASPIRIN_2_SRCS)

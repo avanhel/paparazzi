@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2005-  Pascal Brisset, Antoine Drouin
  *
  * This file is part of paparazzi.
@@ -97,5 +95,13 @@ extern bool_t video_tx_state;
 #define VIDEO_TX_OFF()  { video_tx_state = 0; 0; }
 
 #endif
+
+#define SEND_CAM(_trans, _dev) { \
+  int16_t x = cam_target_x; \
+  int16_t y = cam_target_y; \
+  int16_t phi = DegOfRad(cam_phi_c); \
+  int16_t theta = DegOfRad(cam_theta_c); \
+  DOWNLINK_SEND_CAM(_trans, _dev, &phi, &theta, &x, &y); \
+}
 
 #endif // CAM_H

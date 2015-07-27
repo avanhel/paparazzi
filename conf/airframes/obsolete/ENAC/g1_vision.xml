@@ -4,7 +4,7 @@
 
   <modules main_freq="512">
     <!--load name="vision_cmucam.xml"/-->
-    <load name="sonar_maxbotix_booz.xml"/>
+    <load name="sonar_adc_ins.xml"/>
     <load name="booz_extra_dl.xml"/>
     <load name="booz_gumstix_com.xml"/>
   </modules>
@@ -130,7 +130,6 @@
   </section>
 
   <section name="INS" prefix="BOOZ_INS_">
-    <define name="BARO_SENS" value="15." integer="16"/>
     <define name="SONAR_SENS" value="2.146" integer="16"/>
   </section>
 
@@ -156,9 +155,7 @@
    <define name="HOVER_KD"     value="80"/>
    <define name="HOVER_KI"     value="0"/>
    <!-- 1.5m/s for full stick : SPEED_BFP_OF_REAL(1.5) / (MAX_PPRZ/2) -->
-   <define name="RC_CLIMB_COEF" value ="163"/>
    <!-- SPEED_BFP_OF_REAL(1.5) * 20% -->
-   <define name="RC_CLIMB_DEAD_BAND" value ="160000"/>
    <!-- <define name="INV_M" value="0.118"/> -->
   </section>
 
@@ -194,7 +191,7 @@
 
  <section name="SIMULATOR" prefix="NPS_">
    <define name="ACTUATOR_NAMES"  value="{&quot;front_motor&quot;, &quot;back_motor&quot;, &quot;right_motor&quot;, &quot;left_motor&quot;}"/>
-   <!--define name="INITIAL_CONDITITONS" value="&quot;reset_enac&quot;"/-->
+   <!--define name="JSBSIM_INIT" value="&quot;reset_enac&quot;"/-->
    <define name="SENSORS_PARAMS" value="&quot;nps_sensors_params_booz2_a1.h&quot;"/>
  </section>
 

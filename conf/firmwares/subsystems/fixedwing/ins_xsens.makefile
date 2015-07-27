@@ -12,12 +12,10 @@
 #########################################
 ## ATTITUDE
 
-ifeq ($(TARGET), ap)
-
-ap.CFLAGS += -DUSE_INS
+ap.CFLAGS += -DUSE_INS_MODULE
 
 # AHRS Results
-ap.CFLAGS += -DINS_MODULE_H=\"modules/ins/ins_xsens.h\"
+ap.CFLAGS += -DINS_TYPE_H=\"modules/ins/ins_xsens.h\"
 
 ifndef XSENS_UART_BAUD
 	XSENS_UART_BAUD = B115200
@@ -27,33 +25,14 @@ endif
 #B115200
 
 ap.CFLAGS += -DUSE_UART$(XSENS_UART_NR)
-ap.CFLAGS += -DINS_LINK=Uart$(XSENS_UART_NR)
+ap.CFLAGS += -DINS_LINK=UART$(XSENS_UART_NR)
 ap.CFLAGS += -DUART$(XSENS_UART_NR)_BAUD=$(XSENS_UART_BAUD)
 ap.CFLAGS += -DXSENS_OUTPUT_MODE=0x1836
+ap.srcs   += $(SRC_SUBSYSTEMS)/ins.c
 ap.srcs   += $(SRC_MODULES)/ins/ins_xsens.c
 ap.CFLAGS += -DAHRS_TRIGGERED_ATTITUDE_LOOP
 
 
-endif
-
-ifeq ($(TARGET), fbw)
-
-# when compiling FBW only, the settings need to know the AHRS_TYPE
-
-fbw.CFLAGS += -DAHRS_TYPE_H=\"modules/ins/ins_xsens.h\"
-
-endif
-
-
-ifeq ($(TARGET), sim)
-
-sim.CFLAGS += -DAHRS_TYPE_H=\"subsystems/ahrs/ahrs_sim.h\"
-sim.CFLAGS += -DUSE_AHRS -DAHRS_UPDATE_FW_ESTIMATOR
-
-sim.srcs   += $(SRC_SUBSYSTEMS)/ahrs.c
-sim.srcs   += $(SRC_SUBSYSTEMS)/ahrs/ahrs_sim.c
-
-endif
 
 #########################################
 ## GPS
@@ -65,12 +44,26 @@ ap.CFLAGS += -DUSE_GPS -DGPS_USE_LATLONG
 ap.CFLAGS += -DGPS_TYPE_H=\"modules/ins/ins_xsens.h\"
 ap.srcs += $(SRC_SUBSYSTEMS)/gps.c
 
-sim.CFLAGS += -DUSE_GPS -DGPS_USE_LATLONG
-sim.CFLAGS += -DGPS_TYPE_H=\"subsystems/gps/gps_sim.h\"
-sim.srcs += $(SRC_SUBSYSTEMS)/gps/gps_sim.c
-sim.srcs += $(SRC_SUBSYSTEMS)/gps.c
 
+#########################################
+## Simulator
+SIM_TARGETS = sim jsbsim nps
 
+ifneq (,$(findstring $(TARGET),$(SIM_TARGETS)))
 
+$(TARGET).CFLAGS += -DAHRS_TYPE_H=\"subsystems/ahrs/ahrs_sim.h\"
+$(TARGET).CFLAGS += -DUSE_AHRS -DAHRS_UPDATE_FW_ESTIMATOR
 
+$(TARGET).srcs   += $(SRC_SUBSYSTEMS)/ahrs.c
+$(TARGET).srcs   += $(SRC_SUBSYSTEMS)/ahrs/ahrs_sim.c
+
+$(TARGET).srcs   += $(SRC_SUBSYSTEMS)/ins.c
+$(TARGET).srcs   += $(SRC_SUBSYSTEMS)/ins/ins_gps_passthrough.c
+
+$(TARGET).CFLAGS += -DUSE_GPS -DGPS_USE_LATLONG
+$(TARGET).CFLAGS += -DGPS_TYPE_H=\"subsystems/gps/gps_sim.h\"
+$(TARGET).srcs += $(SRC_SUBSYSTEMS)/gps/gps_sim.c
+$(TARGET).srcs += $(SRC_SUBSYSTEMS)/gps.c
+
+endif
 

@@ -21,8 +21,8 @@
  */
 
 
-/** \file led_cam_ctrl.h
- *  \brief Digital Camera Control
+/** @file modules/digital_cam/led_cam_ctrl.h
+ *  @brief Digital Camera Control
  *
  * Provides the control of the shutter and the zoom of a digital camera
  * through standard binary IOs of the board.
@@ -30,13 +30,18 @@
  * Configuration:
  *  Since the API of led.h is used, connected pins must be defined as led
  *  numbers (usually in the airframe file):
+ * @verbatim
  *   <define name="DC_SHUTTER_LED" value="10"/>
  *   <define name="DC_ZOOM_IN_LED" value="7"/>
  *   <define name="DC_ZOOM_OUT_LED" value="8"/>
  *   <define name="DC_POWER_LED" value="9"/>
+ *   <define name="DC_POWER_OFF_LED" value="10"/>
+ * @endverbatim
  *  Related bank and pin must also be defined:
+ * @verbatim
  *   <define name="LED_10_BANK" value="0"/>
  *   <define name="LED_10_PIN" value="2"/>
+ * @endverbatim
  *  The required initialization (dc_init()) and periodic (4Hz) process
  *
  */
@@ -52,15 +57,6 @@
 
 extern uint8_t dc_timer;
 
-static inline void led_cam_ctrl_init(void)
-{
-  // Call common DC init
-  dc_init();
-
-  // Do LED specific DC init
-  dc_timer = 0;
-}
-
 #ifndef DC_PUSH
 #define DC_PUSH LED_ON
 #endif
@@ -73,9 +69,36 @@ static inline void led_cam_ctrl_init(void)
 #define DC_SHUTTER_DELAY 2  /* 4Hz -> 0.5s */
 #endif
 
+#ifndef DC_POWER_OFF_DELAY
+#define DC_POWER_OFF_DELAY 3
+#endif
+
 #ifndef DC_SHUTTER_LED
 #error DC: Please specify at least a SHUTTER LED
 #endif
+
+static inline void led_cam_ctrl_init(void)
+{
+  // Call common DC init
+  dc_init();
+
+  // Do LED specific DC init
+  dc_timer = 0;
+
+  DC_RELEASE(DC_SHUTTER_LED);
+#ifdef DC_ZOOM_IN_LED
+    DC_RELEASE(DC_ZOOM_IN_LED);
+#endif
+#ifdef DC_ZOOM_OUT_LED
+    DC_RELEASE(DC_ZOOM_OUT_LED);
+#endif
+#ifdef DC_POWER_LED
+    DC_RELEASE(DC_POWER_LED);
+#endif
+#ifdef DC_POWER_OFF_LED
+    DC_RELEASE(DC_POWER_OFF_LED);
+#endif
+}
 
 
 /* 4Hz Periodic */
@@ -99,6 +122,9 @@ static inline void led_cam_ctrl_periodic( void )
 #endif
 #ifdef DC_POWER_LED
     DC_RELEASE(DC_POWER_LED);
+#endif
+#ifdef DC_POWER_OFF_LED
+    DC_RELEASE(DC_POWER_OFF_LED);
 #endif
   }
 

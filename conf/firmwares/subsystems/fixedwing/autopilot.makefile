@@ -26,11 +26,7 @@
 ## COMMON FIXEDWING ALL TARGETS (SIM + AP + FBW ...)
 ##
 
-# temporary hack for ADCs
-ifeq ($(ARCH), stm32)
-# FIXME : this is for the battery
-$(TARGET).CFLAGS += -DUSE_AD1_3
-endif
+
 #
 # Board config + Include paths
 #
@@ -38,9 +34,6 @@ endif
 $(TARGET).CFLAGS 	+= -DBOARD_CONFIG=$(BOARD_CFG)
 $(TARGET).CFLAGS 	+= -DPERIPHERALS_AUTO_INIT
 $(TARGET).CFLAGS 	+= $(FIXEDWING_INC)
-
-# would be better to auto-generate this
-$(TARGET).CFLAGS 	+= -DFIRMWARE=FIXEDWING
 
 $(TARGET).srcs 	+= mcu.c
 $(TARGET).srcs 	+= $(SRC_ARCH)/mcu_arch.c
@@ -56,27 +49,16 @@ endif
 
 $(TARGET).CFLAGS 	+= -DTRAFFIC_INFO
 
-#
-# LEDs
-#
-ifneq ($(ARCH), jsbsim)
-  $(TARGET).CFLAGS 	+= -DUSE_LED
-endif
-ifneq ($(ARCH), lpc21)
-  ifneq ($(ARCH), jsbsim)
-    $(TARGET).srcs 	+= $(SRC_ARCH)/led_hw.c
-  endif
-endif
+
 
 #
 # Sys-time
 #
-ifndef PERIODIC_FREQUENCY
-PERIODIC_FREQUENCY = 60
-endif
+PERIODIC_FREQUENCY ?= 60
 $(TARGET).CFLAGS += -DPERIODIC_FREQUENCY=$(PERIODIC_FREQUENCY)
+
 $(TARGET).srcs   += mcu_periph/sys_time.c $(SRC_ARCH)/mcu_periph/sys_time_arch.c
-$(TARGET).CFLAGS += -DUSE_SYS_TIME -DSYS_TIME_RESOLUTION='(1./$(PERIODIC_FREQUENCY).)'
+$(TARGET).CFLAGS += -DUSE_SYS_TIME
 
 #
 # InterMCU & Commands
@@ -87,12 +69,14 @@ $(TARGET).srcs 		+= $(SRC_FIXEDWING)/inter_mcu.c
 #
 # Math functions
 #
-$(TARGET).srcs += math/pprz_geodetic_int.c math/pprz_geodetic_float.c math/pprz_geodetic_double.c math/pprz_trig_int.c
+$(TARGET).srcs += math/pprz_geodetic_int.c math/pprz_geodetic_float.c math/pprz_geodetic_double.c math/pprz_trig_int.c math/pprz_orientation_conversion.c
 
 #
 # I2C
 #
-include $(CFG_SHARED)/i2c_select.makefile
+$(TARGET).srcs += mcu_periph/i2c.c
+$(TARGET).srcs += $(SRC_ARCH)/mcu_periph/i2c_arch.c
+
 
 ######################################################################
 ##
@@ -108,6 +92,7 @@ endif
 
 ifeq ($(ARCH), stm32)
   ns_srcs 		+= lisa/plug_sys.c
+  ns_srcs       += $(SRC_ARCH)/mcu_periph/gpio_arch.c
 endif
 
 
@@ -119,9 +104,13 @@ ns_srcs	   	+= $(SRC_FIRMWARE)/main.c
 #
 # LEDs
 #
+SYS_TIME_LED ?= none
 ns_CFLAGS 		+= -DUSE_LED
 ifneq ($(SYS_TIME_LED),none)
   ns_CFLAGS 	+= -DSYS_TIME_LED=$(SYS_TIME_LED)
+endif
+ifneq ($(ARCH), lpc21)
+  ns_srcs 	+= $(SRC_ARCH)/led_hw.c
 endif
 
 
@@ -130,19 +119,13 @@ endif
 #
 ns_srcs 		+= mcu_periph/uart.c
 ns_srcs 		+= $(SRC_ARCH)/mcu_periph/uart_arch.c
-ns_srcs 		+= subsystems/settings.c
-ns_srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
+
 
 #
 # ANALOG
 #
 ns_CFLAGS 		+= -DUSE_ADC
-#ifeq ($(ARCH), lpc21)
-  ns_srcs 		+= $(SRC_ARCH)/mcu_periph/adc_arch.c
-ifeq ($(ARCH), stm32)
-  ns_CFLAGS 		+= -DUSE_AD1 -DUSE_AD1_1 -DUSE_AD1_2 -DUSE_AD1_3 -DUSE_AD1_4
-  ns_CFLAGS 		+= -DUSE_ADC1_2_IRQ_HANDLER
-endif
+ns_srcs 			+= $(SRC_ARCH)/mcu_periph/adc_arch.c
 
 ######################################################################
 ##
@@ -152,7 +135,8 @@ endif
 fbw_CFLAGS		+= -DFBW
 fbw_srcs 		+= $(SRC_FIRMWARE)/main_fbw.c
 fbw_srcs 		+= subsystems/electrical.c
-fbw_srcs 		+= $(SRC_FIXEDWING)/commands.c
+fbw_srcs 		+= subsystems/commands.c
+fbw_srcs 		+= subsystems/actuators.c
 fbw_srcs		+= $(SRC_FIRMWARE)/fbw_downlink.c
 
 ######################################################################
@@ -161,9 +145,28 @@ fbw_srcs		+= $(SRC_FIRMWARE)/fbw_downlink.c
 ##
 
 ap_CFLAGS 		+= -DAP
+ap_CFLAGS 		+= -DDefaultPeriodic='&telemetry_Ap'
 ap_srcs 		+= $(SRC_FIRMWARE)/main_ap.c
-ap_srcs 		+= $(SRC_FIXEDWING)/estimator.c
+ap_srcs 		+= $(SRC_FIRMWARE)/autopilot.c
 ap_srcs			+= $(SRC_FIRMWARE)/ap_downlink.c
+ap_srcs         += subsystems/datalink/telemetry.c
+ap_srcs 		+= state.c
+ap_srcs 		+= subsystems/settings.c
+ap_srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
+
+# AIR DATA
+ap_srcs += subsystems/air_data.c
+
+# BARO
+include $(CFG_SHARED)/baro_board.makefile
+
+# ahrs frequencies if configured
+ifdef AHRS_PROPAGATE_FREQUENCY
+ap_CFLAGS += -DAHRS_PROPAGATE_FREQUENCY=$(AHRS_PROPAGATE_FREQUENCY)
+endif
+ifdef AHRS_CORRECT_FREQUENCY
+ap_CFLAGS += -DAHRS_CORRECT_FREQUENCY=$(AHRS_CORRECT_FREQUENCY)
+endif
 
 
 ######################################################################
@@ -176,7 +179,7 @@ ifeq ("$(UNAME)","Darwin")
   sim.CFLAGS += $(shell if test -d /opt/paparazzi/include; then echo "-I/opt/paparazzi/include"; elif test -d /opt/local/include; then echo "-I/opt/local/include"; fi)
 endif
 
-sim.CFLAGS              += $(CPPFLAGS)
+sim.CFLAGS  	+= $(CPPFLAGS)
 sim.CFLAGS 		+= $(fbw_CFLAGS) $(ap_CFLAGS)
 sim.srcs 		+= $(fbw_srcs) $(ap_srcs)
 
@@ -184,10 +187,9 @@ sim.CFLAGS 		+= -DSITL
 sim.srcs 		+= $(SRC_ARCH)/sim_ap.c
 
 sim.CFLAGS 		+= -DDOWNLINK -DDOWNLINK_TRANSPORT=IvyTransport
-sim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/sim_gps.c $(SRC_ARCH)/ivy_transport.c $(SRC_ARCH)/sim_adc_generic.c
+sim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/ivy_transport.c
 
-sim.srcs 		+= subsystems/settings.c
-sim.srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
+sim.srcs 		+= $(SRC_ARCH)/sim_gps.c $(SRC_ARCH)/sim_adc_generic.c
 
 # hack: always compile some of the sim functions, so ocaml sim does not complain about no-existing functions
 sim.srcs        += $(SRC_ARCH)/sim_ahrs.c $(SRC_ARCH)/sim_ir.c
@@ -197,25 +199,37 @@ sim.srcs        += $(SRC_ARCH)/sim_ahrs.c $(SRC_ARCH)/sim_ir.c
 ## JSBSIM THREAD SPECIFIC
 ##
 
-OCAMLLIBDIR=$(shell ocamlc -where)
-JSBSIM_INC = /usr/include/JSBSim
-#JSBSIM_LIB = /usr/lib
+JSBSIM_ROOT ?= /opt/jsbsim
+JSBSIM_INC = $(JSBSIM_ROOT)/include/JSBSim
+JSBSIM_LIB = $(JSBSIM_ROOT)/lib
+
+# use the paparazzi-jsbsim package if it is installed,
+# otherwise look for JSBsim under /opt/jsbsim
+JSBSIM_PKG ?= $(shell pkg-config JSBSim --exists && echo 'yes')
+ifeq ($(JSBSIM_PKG), yes)
+	jsbsim.CFLAGS  += $(shell pkg-config JSBSim --cflags)
+	jsbsim.LDFLAGS += $(shell pkg-config JSBSim --libs)
+else
+	JSBSIM_PKG = no
+	jsbsim.CFLAGS  += -I$(JSBSIM_INC)
+	jsbsim.LDFLAGS += -L$(JSBSIM_LIB) -lJSBSim
+endif
+
 
 jsbsim.CFLAGS 		+= $(fbw_CFLAGS) $(ap_CFLAGS)
 jsbsim.srcs 		+= $(fbw_srcs) $(ap_srcs)
 
-jsbsim.CFLAGS 		+= -DSITL
+jsbsim.CFLAGS 		+= -DSITL -DUSE_JSBSIM
 jsbsim.srcs 		+= $(SIMDIR)/sim_ac_jsbsim.c $(SIMDIR)/sim_ac_fw.c $(SIMDIR)/sim_ac_flightgear.c
 
 # external libraries
-jsbsim.CFLAGS 		+= -I$(SIMDIR) -I/usr/include -I$(JSBSIM_INC) -I$(OCAMLLIBDIR) `pkg-config glib-2.0 --cflags`
-jsbsim.LDFLAGS		+= `pkg-config glib-2.0 --libs` -lglibivy -lm -L/usr/lib -lJSBSim
+jsbsim.CFLAGS 		+= -I/usr/include $(shell pkg-config glib-2.0 --cflags)
+jsbsim.LDFLAGS		+= $(shell pkg-config glib-2.0 --libs) -lglibivy -lm
 
 jsbsim.CFLAGS 		+= -DDOWNLINK -DDOWNLINK_TRANSPORT=IvyTransport
-jsbsim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/jsbsim_hw.c $(SRC_ARCH)/jsbsim_ir.c $(SRC_ARCH)/jsbsim_gps.c $(SRC_ARCH)/jsbsim_ahrs.c $(SRC_ARCH)/ivy_transport.c $(SRC_ARCH)/jsbsim_transport.c
+jsbsim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/ivy_transport.c
 
-jsbsim.srcs 		+= subsystems/settings.c
-jsbsim.srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
+jsbsim.srcs 		+= $(SRC_ARCH)/jsbsim_hw.c $(SRC_ARCH)/jsbsim_ir.c $(SRC_ARCH)/jsbsim_gps.c $(SRC_ARCH)/jsbsim_ahrs.c $(SRC_ARCH)/jsbsim_transport.c
 
 ######################################################################
 ##
@@ -227,15 +241,16 @@ jsbsim.srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
 #
 
 ifeq ($(BOARD),classix)
-  fbw.CFLAGS 		+= -DMCU_SPI_LINK -DUSE_SPI -DSPI_SLAVE
-  fbw.srcs 		+= $(SRC_FIXEDWING)/link_mcu.c mcu_periph/spi.c $(SRC_ARCH)/mcu_periph/spi_arch.c
-  ap_srcs		+= $(SRC_FIRMWARE)/fbw_downlink.c
-  ap.CFLAGS 		+= -DMCU_SPI_LINK -DUSE_SPI -DSPI_MASTER -DUSE_SPI_SLAVE0
-  ap.srcs 		+= $(SRC_FIXEDWING)/link_mcu.c mcu_periph/spi.c $(SRC_ARCH)/mcu_periph/spi_arch.c
+  include $(CFG_FIXEDWING)/intermcu_spi.makefile
 else
   # Single MCU's run both
-  ap.CFLAGS 		+= $(fbw_CFLAGS)
-  ap.srcs 		+= $(fbw_srcs)
+  ifeq ($(SEPARATE_FBW),)
+    ap.CFLAGS 		+= $(fbw_CFLAGS)
+    ap.srcs 		+= $(fbw_srcs)
+  else
+   # avoid fbw_telemetry_mode error
+   ap_srcs		+= $(SRC_FIRMWARE)/fbw_downlink.c
+  endif
 endif
 
 #

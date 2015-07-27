@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2011 The Paparazzi Team
  *
  * This file is part of paparazzi.
@@ -33,9 +31,6 @@
 #include "mcu_periph/pwm_input.h"
 #include "mcu_periph/sys_time.h"
 
-#ifndef DOWNLINK_DEVICE
-#define DOWNLINK_DEVICE DOWNLINK_AP_DEVICE
-#endif
 
 #include "mcu_periph/uart.h"
 #include "messages.h"
@@ -59,7 +54,7 @@ void xtend_rssi_periodic( void ) {
 
   if (pwm_input_duty_valid[XTEND_RSSI_PWM_ARRAY_INDEX])
   {
-      duty_percent = (duty_tics * 100) / CPU_TICKS_OF_USEC(XTEND_RSSI_PWM_PERIOD_USEC);
+      duty_percent = (duty_tics * 100) / cpu_ticks_of_usec(XTEND_RSSI_PWM_PERIOD_USEC);
       rssi_dB_fade_margin = (2 * duty_percent + 10) / 3; //not sure if this is right, datasheet isn't very informative
       pwm_input_duty_valid[XTEND_RSSI_PWM_ARRAY_INDEX] = FALSE;
   }

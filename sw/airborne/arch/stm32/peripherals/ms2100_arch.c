@@ -1,6 +1,4 @@
 /*
- * $Id$
- *
  * Copyright (C) 2010 Antoine Drouin <poinix@gmail.com>
  *
  * This file is part of paparazzi.
@@ -21,62 +19,58 @@
  * Boston, MA 02111-1307, USA.
  */
 
+/**
+ * @file arch/stm32/peripherals/ms2100_arch.c
+ *
+ * STM32 specific functions for the ms2100 magnetic sensor from PNI.
+ */
+
 #include "peripherals/ms2100.h"
+#include "mcu_periph/sys_time.h"
 
 #include <libopencm3/stm32/f1/rcc.h>
-#include <libopencm3/stm32/spi.h>
+#include <libopencm3/stm32/f1/nvic.h>
+#include <libopencm3/stm32/f1/gpio.h>
 #include <libopencm3/stm32/exti.h>
-#include <libopencm3/stm32/f1/dma.h>
-#include <libopencm3/stm32/nvic.h>
-
-uint8_t ms2100_cur_axe;
-int16_t ms2100_last_reading; // can't write in place because that stupid beast
-                             // stips stupid values once in a while that I need
-                             // to filter - high time we get rid of this crap hardware
-                             // and no, I checked with the logic analyzer, timing are
-                             // within specs
 
 void ms2100_arch_init( void ) {
 
-  ms2100_cur_axe = 0;
+  /* set mag reset as output (reset on PC13) ----*/
+  rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPCEN | RCC_APB2ENR_AFIOEN);
+  gpio_set(GPIOC, GPIO13);
+  gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
+  Ms2100Reset();
 
-  /* set mag SS and reset as output and assert them (SS on PC12  reset on PC13) ----*/
-  Ms2100Unselect();
+  /* configure data ready input on PB5 */
+  rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPBEN | RCC_APB2ENR_AFIOEN);
+  gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO5);
+
+  /* external interrupt for drdy pin */
+  exti_select_source(EXTI5, GPIOB);
+  exti_set_trigger(EXTI5, EXTI_TRIGGER_RISING);
+  exti_enable_request(EXTI5);
+
+  nvic_set_priority(NVIC_EXTI9_5_IRQ, 0x0f);
+  nvic_enable_irq(NVIC_EXTI9_5_IRQ);
+}
+
+void ms2100_reset_cb( struct spi_transaction * t __attribute__ ((unused)) ) {
+  // set RESET pin high for at least 100 nsec
+  // busy wait should not harm
   Ms2100Set();
 
-  /* Configure clocks */
-  rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPCEN | RCC_APB2ENR_IOPBEN);
+  // FIXME, make nanosleep funcion
+  uint32_t dt_ticks = cpu_ticks_of_nsec(110);
+  int32_t end_cpu_ticks = systick_get_value() - dt_ticks;
+  if (end_cpu_ticks < 0)
+    end_cpu_ticks += systick_get_reload();
+  while (systick_get_value() > end_cpu_ticks)
+    ;
 
-  /* Configure chip select */
-  gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ,
-	        GPIO_CNF_OUTPUT_PUSHPULL, GPIO12 | GPIO13);
-
-  /* configure data ready on PB5 */
-  gpio_set_mode(GPIOB, GPIO_MODE_INPUT,
-	        GPIO_CNF_INPUT_FLOAT, GPIO5);
-
-#ifdef MS2100_HANDLES_DMA_IRQ
-  /* Enable DMA1 channel4 IRQ Channel */
-  nvic_set_priority(NVIC_DMA1_CHANNEL4_IRQ, 0);
-  nvic_enable_irq(NVIC_DMA1_CHANNEL4_IRQ);
-#endif /* MS2100_HANDLES_DMA_IRQ */
-
-#ifdef MS2100_HANDLES_SPI_IRQ
-  nvic_set_priority(NVIC_SPI2_IRQ, 1);
-  nvic_enable_irq(NVIC_SPI2_IRQ);
-#endif /* MS2100_HANDLES_SPI_IRQ */
-
+  Ms2100Reset();
 }
 
-#ifdef MS2100_HANDLES_SPI_IRQ
-void spi2_irq_handler(void) {
-  Ms2100OnSpiIrq();
+void exti9_5_isr(void) {
+  ms2100.status = MS2100_GOT_EOC;
+  exti_reset_request(EXTI5);
 }
-#endif
-
-
-#ifdef MS2100_HANDLES_DMA_IRQ
-void dma1_c4_irq_handler(void) {
-  Ms2100OnDmaIrq();
-}
-#endif /* MS2100_HANDLES_DMA_IRQ */

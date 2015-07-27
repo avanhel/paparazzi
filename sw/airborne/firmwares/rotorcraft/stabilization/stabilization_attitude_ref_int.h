@@ -24,17 +24,13 @@
  *  Common to all fixed-point reference generators (euler and quaternion)
  */
 
-#ifndef STABILISATION_ATTITUDE_REF_INT_H
-#define STABILISATION_ATTITUDE_REF_INT_H
+#ifndef STABILIZATION_ATTITUDE_REF_INT_H
+#define STABILIZATION_ATTITUDE_REF_INT_H
 
 #include "math/pprz_algebra_int.h"
 
-#include "subsystems/ahrs.h"
-
-extern struct Int32Eulers stab_att_sp_euler;  ///< with #INT32_ANGLE_FRAC
-extern struct Int32Quat   stab_att_sp_quat;   ///< with #INT32_QUAT_FRAC
+extern struct Int32Eulers stab_att_sp_euler; ///< with #INT32_ANGLE_FRAC
 extern struct Int32Eulers stab_att_ref_euler; ///< with #REF_ANGLE_FRAC
-extern struct Int32Quat   stab_att_ref_quat;  ///< with #INT32_QUAT_FRAC
 extern struct Int32Rates  stab_att_ref_rate;  ///< with #REF_RATE_FRAC
 extern struct Int32Rates  stab_att_ref_accel; ///< with #REF_ACCEL_FRAC
 
@@ -49,18 +45,7 @@ extern struct Int32RefModel stab_att_ref_model;
 #define REF_RATE_FRAC  16
 #define REF_ANGLE_FRAC 20
 
-#define REF_ANGLE_PI      BFP_OF_REAL(3.1415926535897932384626433832795029, REF_ANGLE_FRAC)
-#define REF_ANGLE_TWO_PI  BFP_OF_REAL(2.*3.1415926535897932384626433832795029, REF_ANGLE_FRAC)
-#define ANGLE_REF_NORMALIZE(_a) {                       \
-    while (_a >  REF_ANGLE_PI)  _a -= REF_ANGLE_TWO_PI; \
-    while (_a < -REF_ANGLE_PI)  _a += REF_ANGLE_TWO_PI; \
-  }
+extern void stabilization_attitude_ref_init(void);
+extern void stabilization_attitude_ref_update(void);
 
-
-static inline void reset_psi_ref_from_body(void) {
-  stab_att_ref_euler.psi = ahrs.ltp_to_body_euler.psi << (REF_ANGLE_FRAC - INT32_ANGLE_FRAC);
-  stab_att_ref_rate.r = 0;
-  stab_att_ref_accel.r = 0;
-}
-
-#endif /* STABILISATION_ATTITUDE_REF_INT_H */
+#endif /* STABILIZATION_ATTITUDE_REF_INT_H */

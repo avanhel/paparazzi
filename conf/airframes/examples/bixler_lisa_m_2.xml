@@ -21,7 +21,6 @@
 
     <target name="sim" 			board="pc"/>
 
-    <define name="ALT_KALMAN"/>
     <define name="USE_MAGNETOMETER" value="FALSE"/>
 
     <subsystem name="radio_control" type="ppm"/>
@@ -31,6 +30,7 @@
     <subsystem name="ahrs" type="float_dcm"/>
     <subsystem name="gps" type="ublox"/>
     <subsystem name="navigation"/>
+    <subsystem name="ins" type="alt_float"/>
   </firmware>
 
   <!-- commands section -->
@@ -96,7 +96,6 @@
     <define name="NOMINAL_AIRSPEED" value="15." unit="m/s"/>
     <define name="CARROT" value="4." unit="s"/>
     <define name="KILL_MODE_DISTANCE" value="(2.0*MAX_DIST_FROM_HOME)"/>
-    <define name="CONTROL_RATE" value="60" unit="Hz"/>
     <define name="ALT_KALMAN_ENABLED" value="TRUE"/>
     <define name="DEFAULT_CIRCLE_RADIUS" value="100."/>
   </section>
